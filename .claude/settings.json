@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "_comment": "Base allow-list is intentionally stack-agnostic — only universal, read-only, non-destructive commands. Add stack-specific entries (npm/yarn/pnpm, pip/poetry, go, cargo, docker, etc.) when this template is copied into an actual project. Never add destructive commands (rm -rf, git push --force, db migrate down, etc.) to 'allow' — those should prompt every time.",
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(pwd)"
+    ],
+    "deny": []
+  }
+}
