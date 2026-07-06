@@ -31,11 +31,24 @@ fetches header metadata (`Message` dataclass — no body parsing yet);
 `threadId`). No sender/relevance filtering here by design — that's
 Claude's job (planned `llm/`).
 
-## gcalendar/ (PLANNED)
+## gcalendar/
 
-Google Calendar API wrapper: free/busy check, open-slot finding, event
-creation. Named `gcalendar/`, not `calendar/`, to avoid shadowing
-Python's stdlib `calendar` module.
+Google Calendar API wrapper. Named `gcalendar/`, not `calendar/`, to
+avoid shadowing Python's stdlib `calendar` module. `client.py` builds
+the authenticated service via `auth.get_credentials()` and defines
+`CALENDAR_ID = "primary"`, the single calendar this project operates
+against; `freebusy.py` reads the calendar's IANA timezone (off an
+`events().list()` response, to avoid needing a broader scope) and
+checks/queries free-busy; `slots.py` finds up to 5 open 30-minute
+slots across the next 5 business days (9am-5pm) from a single
+`freebusy.query` call (`TimeSlot` dataclass); `events.py` books
+confirmed events, creates tentative holds tagged with a Gmail thread
+ID via `extendedProperties.private` (`scheduler_hold`/
+`scheduler_thread_id`), confirms a hold while deleting its siblings,
+and sweeps/deletes holds older than 48 hours (`Hold` dataclass). Every
+write passes `sendUpdates="none"` — this project never lets Calendar
+auto-email attendees; the only outbound channel is a manually-reviewed
+Gmail draft.
 
 ## llm/ (PLANNED)
 
@@ -61,4 +74,4 @@ for file-ownership rules.
 
 ---
 
-Last structural update: 2026-07-06
+Last structural update: 2026-07-06 (gcalendar/ built)

@@ -56,15 +56,9 @@ ship (see `specs/INDEX.md` for the completed ones' details).
 2. ✅ **Done** — Read unread Gmail messages + create a draft reply
    (no relevance filtering — that's step 4 below). See
    `specs/INDEX.md`.
-3. ⬜ **Next up** — **Google Calendar read + write, with tentative
-   holds.** `gcalendar/`: freebusy check for a given slot, open-slot
-   finder across a date range, confirmed event creation, **plus the
-   hold mechanism**: create tentative events tagged with a Gmail
-   thread ID (via `extendedProperties.private`) when offering
-   availability; confirm-and-release-siblings when one is accepted;
-   sweep-and-delete holds older than 48 hours with no confirmation.
-   This is the trickiest part of the whole project — gets a full spec.
-4. ⬜ **Claude classification** — `llm/`: given raw email text,
+3. ✅ **Done** — Google Calendar read + write, with tentative holds.
+   See `specs/INDEX.md`.
+4. ⬜ **Next up** — **Claude classification** — `llm/`: given raw email text,
    classify intent and extract a proposed datetime, or flag "asking
    availability," and detect replies that accept one of a prior
    thread's offered slots. Anthropic API key via `ANTHROPIC_API_KEY`
