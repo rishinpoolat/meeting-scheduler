@@ -9,8 +9,8 @@ Once the developer approves a plan (per plan-mode.md) and plan.md has
 been created:
 
 1. Create a new feature branch before writing any implementation code.
-   Branch name: (fill in this project's convention, e.g.
-   feature/<short-name>)
+   Branch name: `feature/<short-name>` (e.g. `feature/gmail-oauth`), or
+   `fix/<short-name>` for bug fixes.
 2. All implementation, spec.md, and plan.md for this feature live on
    this branch until merge.
 3. Do not implement directly on main/develop.
@@ -30,7 +30,9 @@ been created:
   the developer has given explicit pre-commit approval (see
   .claude/skills/testing/SKILL.md) — a passing test run alone is not
   authorization to commit.
-- Commit messages: (fill in this project's convention)
+- Commit messages: Conventional Commits with scope —
+  `type(scope): description` (e.g. `feat(gmail-auth): add OAuth2 device
+  flow`). Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.
 - One commit per logical step is preferred over one giant commit at the
   end, but never commit code that hasn't passed the quality gate.
 

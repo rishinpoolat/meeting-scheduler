@@ -1,17 +1,27 @@
-# Project Name
+# meeting-scheduler
 
-One paragraph: what this project does.
+An agent that watches a Gmail inbox for meeting/scheduling enquiries
+sent via a portfolio website's contact email and responds
+autonomously: if the sender proposes a specific time and it's free, it
+books the event on Google Calendar and drafts a confirmation reply; if
+the sender asks for availability, it finds open slots on the calendar
+and drafts a reply listing 5 suitable times. All replies are created
+as Gmail drafts for manual review/send — never auto-sent.
+
+**Stack:** Python, Anthropic API (Claude, tool use), Gmail API, Google
+Calendar API, OAuth2 (google-auth-oauthlib).
 
 ## Commands
 
-- `<fill in>` — start dev server
-- `<fill in>` — run tests
-- `<fill in>` — typecheck
-- `<fill in>` — lint
+- `pip install -r requirements.txt` — install deps
+- `python agent.py` — run one polling cycle
+- `pytest` — run tests
+- `mypy .` — typecheck
+- `ruff check .` — lint
+- `ruff format .` — format
 
-> Fill these in from the project's actual package manifest (package.json,
-> pyproject.toml, go.mod, etc.) once it exists. Until then, leave the
-> placeholders — don't guess a stack that hasn't been chosen yet.
+> `requirements.txt` doesn't exist yet — it gets created (with pinned
+> deps) when the first feature scaffolds real code.
 
 ## Architecture
 
@@ -40,4 +50,8 @@ the rule above, which is read on most tasks regardless.
 
 ## Code style
 
-- (fill in: linting/formatting specifics not already enforced by tooling)
+- Type hints required on all function signatures — enforced by `mypy`.
+- Formatting and lint rules are owned by `ruff` (`ruff format` /
+  `ruff check`) — don't hand-debate style, run the tool.
+- PEP 8 naming: `snake_case` for functions/variables, `PascalCase` for
+  classes.

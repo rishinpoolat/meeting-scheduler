@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "_comment": "Base allow-list is intentionally stack-agnostic — only universal, read-only, non-destructive commands. Add stack-specific entries (npm/yarn/pnpm, pip/poetry, go, cargo, docker, etc.) when this template is copied into an actual project. Never add destructive commands (rm -rf, git push --force, db migrate down, etc.) to 'allow' — those should prompt every time.",
+  "_comment": "Base allow-list is intentionally stack-agnostic — only universal, read-only, non-destructive commands — plus this project's Python build/lint/test tooling (pip, pytest, mypy, ruff), which is local and reversible. Deliberately NOT allow-listed: `python agent.py` — running the live agent can write a real Google Calendar event and create Gmail drafts, i.e. it has side effects on shared external systems, so it should prompt every time like any other state-changing action. Never add destructive commands (rm -rf, git push --force, db migrate down, etc.) to 'allow' — those should prompt every time.",
   "permissions": {
     "allow": [
       "Bash(git status)",
@@ -11,7 +11,15 @@
       "Bash(cat:*)",
       "Bash(grep:*)",
       "Bash(find:*)",
-      "Bash(pwd)"
+      "Bash(pwd)",
+      "Bash(pip install:*)",
+      "Bash(pip freeze:*)",
+      "Bash(pip list:*)",
+      "Bash(pytest:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(mypy:*)",
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)"
     ],
     "deny": []
   }
