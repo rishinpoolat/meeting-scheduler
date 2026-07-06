@@ -15,14 +15,21 @@
 Entry point. Orchestrates one polling cycle: fetch unread emails,
 classify intent, act (book event or find slots), draft reply.
 
-## auth/ (PLANNED)
+## auth/
 
 OAuth2 flow (`google-auth-oauthlib`) and token storage/refresh for the
-combined Gmail + Calendar scopes.
+combined Gmail + Calendar scopes. `google_auth.py` exposes
+`get_credentials()` — always import this rather than touching
+`credentials.json`/`token.json` directly.
 
-## gmail/ (PLANNED)
+## gmail/
 
-Gmail API wrapper: list/read unread messages, create draft replies.
+Gmail API wrapper. `client.py` builds the authenticated service via
+`auth.get_credentials()`; `read.py` lists unread inbox messages and
+fetches header metadata (`Message` dataclass — no body parsing yet);
+`draft.py` creates threaded draft replies (`In-Reply-To`/`References`/
+`threadId`). No sender/relevance filtering here by design — that's
+Claude's job (planned `llm/`).
 
 ## gcalendar/ (PLANNED)
 
@@ -40,9 +47,11 @@ the reply text.
 
 Credential paths, polling settings, constants.
 
-## tests/ (PLANNED)
+## tests/
 
-pytest suite; mocks the Gmail/Calendar API clients.
+pytest suite; mocks the Gmail/Calendar API clients (`unittest.mock`,
+no real network calls). Config in `pyproject.toml`
+(`[tool.pytest.ini_options]`).
 
 ## specs/
 
