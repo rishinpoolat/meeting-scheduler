@@ -21,8 +21,22 @@ been created:
 - plan.md and spec.md live with the feature, not in a shared root file
 - Never edit another feature's plan.md or spec.md — read-only if you
   need to reference it
-- CODEBASE_MAP.md is the exception — it's shared and directly editable,
-  since most features touch different, non-overlapping sections of it
+- CODEBASE_MAP.md, specs/ROADMAP.md, and specs/INDEX.md are the
+  exceptions — shared and directly editable, since most features touch
+  different, non-overlapping parts of them
+
+## Indexing (avoid reading every spec)
+
+Don't open every `specs/<date>-<name>/spec.md` at the start of a
+session — read `specs/INDEX.md` instead (see CLAUDE.md's Architecture
+section). Only open a specific feature's spec.md/plan.md when working
+directly on or near that area.
+
+Once a feature's plan.md is marked Completed and it's merged, append
+one line to specs/INDEX.md in the same step — don't batch it for
+later (mirrors how the codebase-map skill treats CODEBASE_MAP.md
+updates). Also update specs/ROADMAP.md's feature-sequence status
+(⬜ → ✅) for that feature.
 
 ## Commit (after the testing skill's pre-commit approval step)
 

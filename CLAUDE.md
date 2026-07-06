@@ -28,6 +28,14 @@ Calendar API, OAuth2 (google-auth-oauthlib).
 See @CODEBASE_MAP.md for folder-by-folder layout. Read it before
 grepping — it should answer "where does X live" faster than searching.
 
+See @specs/ROADMAP.md for the planned feature sequence and the
+end-to-end design (including decisions not yet implemented, like the
+Feature 3 tentative-hold mechanism).
+
+See @specs/INDEX.md for a one-line log of *completed* features. Read
+this, not every `specs/<date>-<name>/spec.md` — only open a specific
+feature's spec.md/plan.md when working directly on or near that area.
+
 ## Workflow
 
 Every feature goes through plan mode with explicit developer approval
