@@ -1,0 +1,6 @@
+google-auth>=2.23
+google-auth-oauthlib>=1.2
+google-api-python-client>=2.100
+pytest>=8.0
+mypy>=1.10
+ruff>=0.6
