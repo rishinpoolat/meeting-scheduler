@@ -5,3 +5,13 @@ __pycache__/
 token.json
 credentials.json
 client_secret*.json
+
+# tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# OS / editor cruft
+.DS_Store
+.vscode/
+.idea/
