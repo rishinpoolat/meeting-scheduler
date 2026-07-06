@@ -16,3 +16,11 @@
   relevance filtering — deferred to Claude classification) and create
   correctly threaded Gmail draft replies. `gmail/{client,read,draft}.py`.
   → [`specs/2026-07-06-gmail-read-draft/`](./2026-07-06-gmail-read-draft/)
+
+- **2026-07-06 — gcalendar-holds**: Calendar free/busy checks, open-slot
+  finding (5 slots across the next 5 business days via a single
+  freebusy query), confirmed event booking, and the tentative-hold
+  mechanism (create tagged with a Gmail thread ID via
+  `extendedProperties.private`, confirm-and-release-siblings,
+  48-hour stale-hold sweep). `gcalendar/{client,freebusy,slots,events}.py`.
+  → [`specs/2026-07-06-gcalendar-holds/`](./2026-07-06-gcalendar-holds/)
