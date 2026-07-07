@@ -40,8 +40,10 @@ the authenticated service via `auth.get_credentials()` and defines
 against; `freebusy.py` reads the calendar's IANA timezone (off an
 `events().list()` response, to avoid needing a broader scope) and
 checks/queries free-busy; `slots.py` finds up to 5 open 30-minute
-slots across the next 5 business days (9am-5pm) from a single
-`freebusy.query` call (`TimeSlot` dataclass); `events.py` books
+slots across the next 5 business days (9am-5pm), at most one per
+half-day (morning 9-1, afternoon 1-5) so offered times spread out
+instead of clustering, from a single `freebusy.query` call (`TimeSlot`
+dataclass); `events.py` books
 confirmed events, creates tentative holds tagged with a Gmail thread
 ID via `extendedProperties.private` (`scheduler_hold`/
 `scheduler_thread_id`), confirms a hold while deleting its siblings,
