@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -24,53 +24,47 @@ def _dt(day, hour, minute=0):
     return datetime(2024, 1, day, hour, minute, tzinfo=timezone.utc)
 
 
-def test_fully_free_calendar_returns_exactly_count_slots_from_9am():
+def _slot(day, hour, minute=0):
+    start = _dt(day, hour, minute)
+    return TimeSlot(start=start, end=start + timedelta(minutes=30))
+
+
+def test_fully_free_calendar_spreads_slots_across_half_days():
     service = _service()
 
     slots = find_open_slots(service, count=5, now=_dt(MON, 8, 0))
 
-    assert len(slots) == 5
-    assert slots[0] == TimeSlot(start=_dt(MON, 9, 0), end=_dt(MON, 9, 30))
+    assert slots == [
+        _slot(MON, 9, 0),
+        _slot(MON, 13, 0),
+        _slot(TUE, 9, 0),
+        _slot(TUE, 13, 0),
+        _slot(WED, 9, 0),
+    ]
 
 
-def test_friday_afternoon_skips_weekend_to_monday():
-    service = _service()
-
-    slots = find_open_slots(service, count=10, now=_dt(FRI, 16, 0))
-
-    assert slots[0] == TimeSlot(start=_dt(FRI, 16, 0), end=_dt(FRI, 16, 30))
-    assert slots[1] == TimeSlot(start=_dt(FRI, 16, 30), end=_dt(FRI, 17, 0))
-    assert slots[2] == TimeSlot(start=_dt(8, 9, 0), end=_dt(8, 9, 30))
-
-
-def test_mid_morning_now_rounds_up_to_next_30_minute_mark():
+def test_mid_morning_now_rounds_up_but_stays_in_morning_half():
     service = _service()
 
     slots = find_open_slots(service, count=1, now=_dt(TUE, 11, 47))
 
-    assert slots[0].start == _dt(TUE, 12, 0)
+    assert slots == [_slot(TUE, 12, 0)]
 
 
-def test_busy_interval_mid_window_splits_slots_around_it():
-    service = _service(
-        busy_periods=[{"start": "2024-01-02T10:00:00Z", "end": "2024-01-02T11:00:00Z"}]
-    )
+def test_mid_afternoon_now_excludes_morning_and_rounds_up_within_afternoon():
+    service = _service()
 
-    slots = find_open_slots(service, count=10, now=_dt(TUE, 8, 0))
+    slots = find_open_slots(service, count=1, now=_dt(TUE, 14, 17))
 
-    assert TimeSlot(start=_dt(TUE, 9, 0), end=_dt(TUE, 9, 30)) in slots
-    assert TimeSlot(start=_dt(TUE, 11, 0), end=_dt(TUE, 11, 30)) in slots
-    assert not any(_dt(TUE, 10, 0) <= slot.start < _dt(TUE, 11, 0) for slot in slots)
+    assert slots == [_slot(TUE, 14, 30)]
 
 
-def test_fully_busy_day_is_skipped_to_next_business_day():
-    service = _service(
-        busy_periods=[{"start": "2024-01-01T09:00:00Z", "end": "2024-01-01T17:00:00Z"}]
-    )
+def test_now_exactly_at_midday_boundary_excludes_morning():
+    service = _service()
 
-    slots = find_open_slots(service, count=1, now=_dt(MON, 8, 0))
+    slots = find_open_slots(service, count=2, now=_dt(TUE, 13, 0))
 
-    assert slots[0].start == _dt(TUE, 9, 0)
+    assert slots == [_slot(TUE, 13, 0), _slot(WED, 9, 0)]
 
 
 def test_now_after_5pm_excludes_today():
@@ -78,7 +72,45 @@ def test_now_after_5pm_excludes_today():
 
     slots = find_open_slots(service, count=1, now=_dt(TUE, 18, 0))
 
-    assert slots[0].start == _dt(WED, 9, 0)
+    assert slots == [_slot(WED, 9, 0)]
+
+
+def test_friday_afternoon_skips_weekend_to_monday_morning_not_afternoon():
+    service = _service()
+
+    slots = find_open_slots(service, count=3, now=_dt(FRI, 16, 0))
+
+    assert slots == [_slot(FRI, 16, 0), _slot(8, 9, 0), _slot(8, 13, 0)]
+
+
+def test_busy_full_morning_skips_to_afternoon_next_day_starts_fresh():
+    service = _service(
+        busy_periods=[{"start": "2024-01-01T09:00:00Z", "end": "2024-01-01T13:00:00Z"}]
+    )
+
+    slots = find_open_slots(service, count=3, now=_dt(MON, 8, 0))
+
+    assert slots == [_slot(MON, 13, 0), _slot(TUE, 9, 0), _slot(TUE, 13, 0)]
+
+
+def test_partial_busy_block_shifts_chosen_slot_later_within_same_half():
+    service = _service(
+        busy_periods=[{"start": "2024-01-02T09:00:00Z", "end": "2024-01-02T10:00:00Z"}]
+    )
+
+    slots = find_open_slots(service, count=1, now=_dt(TUE, 8, 0))
+
+    assert slots == [_slot(TUE, 10, 0)]
+
+
+def test_fully_busy_day_skips_both_halves_to_next_business_day():
+    service = _service(
+        busy_periods=[{"start": "2024-01-01T09:00:00Z", "end": "2024-01-01T17:00:00Z"}]
+    )
+
+    slots = find_open_slots(service, count=1, now=_dt(MON, 8, 0))
+
+    assert slots == [_slot(TUE, 9, 0)]
 
 
 def test_fully_busy_lookahead_window_returns_fewer_than_count():
@@ -104,3 +136,27 @@ def test_naive_now_raises_instead_of_silently_using_local_timezone():
 
     with pytest.raises(ValueError, match="timezone-aware"):
         find_open_slots(service, count=1, now=datetime(2024, 1, 1, 8, 0))
+
+
+def test_count_zero_returns_empty_list():
+    service = _service()
+
+    slots = find_open_slots(service, count=0, now=_dt(MON, 8, 0))
+
+    assert slots == []
+
+
+def test_count_negative_returns_empty_list():
+    service = _service()
+
+    slots = find_open_slots(service, count=-1, now=_dt(MON, 8, 0))
+
+    assert slots == []
+
+
+def test_now_exactly_at_5pm_excludes_today():
+    service = _service()
+
+    slots = find_open_slots(service, count=1, now=_dt(TUE, 17, 0))
+
+    assert slots == [_slot(WED, 9, 0)]
