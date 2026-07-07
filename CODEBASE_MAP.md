@@ -52,15 +52,29 @@ write passes `sendUpdates="none"` — this project never lets Calendar
 auto-email attendees; the only outbound channel is a manually-reviewed
 Gmail draft.
 
-## llm/ (PLANNED)
+## llm/
 
-Claude tool-use orchestration: classifies each email (proposes a
-specific time vs. asks for availability), decides the action, drafts
-the reply text.
+Claude tool-use orchestration. `client.py` builds the Anthropic client
+via `config.ANTHROPIC_API_KEY` (validated lazily, only inside
+`get_client()`, so importing the other modules never requires a key);
+`classify.py`'s `classify_email()` uses a forced tool call to classify
+an email's scheduling intent (propose a specific time / ask
+availability / accept one of a thread's previously-offered holds /
+irrelevant) and extract a proposed datetime or matched `Hold` — a
+malformed-but-well-formed response (bad index, unparseable/naive time)
+downgrades to `irrelevant` rather than raising, while a missing
+tool-use block raises (see spec for the raise-vs-downgrade rule);
+`draft.py` has four outcome-specific functions (not one polymorphic
+type) that draft reply text via plain Claude completions, one per
+calendar outcome. Pure module — no Gmail/Calendar API calls happen
+here; the orchestrator (planned `agent.py`) wires `llm/` together with
+`gmail/`/`gcalendar/`.
 
-## config.py (PLANNED)
+## config.py
 
-Credential paths, polling settings, constants.
+Loads `.env` via `python-dotenv` and exposes `ANTHROPIC_API_KEY` /
+`CLAUDE_MODEL` (shared by classification and drafting). Credential
+paths for Google auth stay in `auth/google_auth.py`, not here.
 
 ## tests/
 
@@ -76,4 +90,4 @@ for file-ownership rules.
 
 ---
 
-Last structural update: 2026-07-06 (gcalendar/ built)
+Last structural update: 2026-07-07 (llm/ and config.py built)

@@ -24,3 +24,12 @@
   `extendedProperties.private`, confirm-and-release-siblings,
   48-hour stale-hold sweep). `gcalendar/{client,freebusy,slots,events}.py`.
   → [`specs/2026-07-06-gcalendar-holds/`](./2026-07-06-gcalendar-holds/)
+
+- **2026-07-07 — llm-classify-draft**: Claude tool-use email classification
+  (intent + proposed datetime + thread-hold-acceptance matching, with a
+  raise-vs-downgrade rule for malformed model responses) and four
+  outcome-specific reply-drafting functions. Also adds
+  `gmail.read.get_message_body()` (full MIME body fetch, since only a
+  short snippet was available before) and root `config.py`/`.env` for
+  the Anthropic API key. `llm/{client,classify,draft}.py`, `config.py`.
+  → [`specs/2026-07-07-llm-classify-draft/`](./2026-07-07-llm-classify-draft/)
