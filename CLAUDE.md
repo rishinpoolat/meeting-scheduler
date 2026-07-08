@@ -8,8 +8,8 @@ the sender asks for availability, it finds open slots on the calendar
 and drafts a reply listing 5 suitable times. All replies are created
 as Gmail drafts for manual review/send — never auto-sent.
 
-**Stack:** Python, Anthropic API (Claude, tool use), Gmail API, Google
-Calendar API, OAuth2 (google-auth-oauthlib).
+**Stack:** Python, Google Gemini API (google-genai, structured output),
+Gmail API, Google Calendar API, OAuth2 (google-auth-oauthlib).
 
 ## Commands
 

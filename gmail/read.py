@@ -1,5 +1,6 @@
 """Listing unread Gmail messages and fetching their reply-relevant metadata."""
 
+import base64
 from dataclasses import dataclass
 from typing import Any
 
@@ -54,3 +55,49 @@ def get_message(service: Any, message_id: str) -> Message:
         references_header=headers.get("references", ""),
         snippet=response.get("snippet", ""),
     )
+
+
+def get_message_body(service: Any, message_id: str) -> str:
+    """Fetch and return the plain-text body of a message.
+
+    Recursively walks payload.parts, returning the first inline (i.e. not
+    Content-Disposition: attachment) text/plain leaf found in document
+    order. Returns "" for HTML-only emails and for bodies large enough that
+    Gmail omits inline data (attachmentId-only parts) — no HTML-to-text
+    conversion or attachment fetching is performed.
+    """
+    response = (
+        service.users()
+        .messages()
+        .get(userId="me", id=message_id, format="full")
+        .execute()
+    )
+    return _find_plain_text(response.get("payload", {})) or ""
+
+
+def _find_plain_text(payload: dict[str, Any]) -> str | None:
+    data = payload.get("body", {}).get("data")
+    if payload.get("mimeType") == "text/plain" and data and not _is_attachment(payload):
+        return _decode_body_data(data)
+    for part in payload.get("parts") or []:
+        found = _find_plain_text(part)
+        if found is not None:
+            return found
+    return None
+
+
+def _is_attachment(payload: dict[str, Any]) -> bool:
+    disposition = next(
+        (
+            header["value"]
+            for header in payload.get("headers") or []
+            if header["name"].lower() == "content-disposition"
+        ),
+        "",
+    )
+    return disposition.lower().startswith("attachment")
+
+
+def _decode_body_data(data: str) -> str:
+    padded = data + "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode(padded).decode("utf-8", errors="replace")

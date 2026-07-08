@@ -58,12 +58,12 @@ ship (see `specs/INDEX.md` for the completed ones' details).
    `specs/INDEX.md`.
 3. ✅ **Done** — Google Calendar read + write, with tentative holds.
    See `specs/INDEX.md`.
-4. ⬜ **Next up** — **Claude classification** — `llm/`: given raw email text,
-   classify intent and extract a proposed datetime, or flag "asking
-   availability," and detect replies that accept one of a prior
-   thread's offered slots. Anthropic API key via `ANTHROPIC_API_KEY`
-   env var / `.env` (already gitignored), read by the `anthropic` SDK
-   automatically — no OAuth-style consent flow needed for this one.
+4. ✅ **Done** — **LLM classification + reply drafting** — `llm/`: given raw
+   email text, classifies intent and extracts a proposed datetime, or
+   flags "asking availability," and detects replies that accept one of
+   a prior thread's offered slots. Also drafts the reply text for each
+   calendar outcome. Originally built on Anthropic (Claude), migrated
+   to Google Gemini (free tier) shortly after. See `specs/INDEX.md`.
 5. ⬜ **Wire the full cycle** — `agent.py` orchestrates 1–4 end to end
    for a single unread email, including matching a reply back to its
    original thread's holds.
