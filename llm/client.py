@@ -1,16 +1,16 @@
-"""Anthropic API client construction."""
+"""Gemini API client construction."""
 
 from typing import Any
 
-import anthropic
+from google import genai
 
-from config import ANTHROPIC_API_KEY
+from config import GEMINI_API_KEY
 
 
 def get_client() -> Any:
-    """Return an authenticated Anthropic API client."""
-    if not ANTHROPIC_API_KEY:
+    """Return an authenticated Gemini API client."""
+    if not GEMINI_API_KEY:
         raise RuntimeError(
-            "ANTHROPIC_API_KEY is not set - add it to .env or the environment"
+            "GEMINI_API_KEY is not set - add it to .env or the environment"
         )
-    return anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    return genai.Client(api_key=GEMINI_API_KEY)

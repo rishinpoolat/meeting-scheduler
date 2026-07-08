@@ -12,7 +12,8 @@ drafts for manual review/send — never auto-sent.
 ## Stack
 
 - Python
-- Anthropic API (Claude, tool use) — for email classification (planned)
+- Google Gemini API (`google-genai`, structured output) — for email
+  classification and reply drafting
 - Gmail API
 - Google Calendar API
 - OAuth2 (`google-auth-oauthlib`)
@@ -20,12 +21,12 @@ drafts for manual review/send — never auto-sent.
 ## Status
 
 Currently implemented: OAuth2 (Gmail + Calendar), reading unread Gmail
-messages and drafting threaded replies, and the Google Calendar layer
+messages and drafting threaded replies, the Google Calendar layer
 (free/busy checks, open-slot finding, confirmed booking, tentative
-holds). Claude-based classification and the end-to-end polling loop
-are not built yet. See [`specs/ROADMAP.md`](specs/ROADMAP.md) for the
-full planned sequence and [`specs/INDEX.md`](specs/INDEX.md) for a log
-of what's shipped.
+holds), and Gemini-based email classification + reply drafting. The
+end-to-end polling loop (`agent.py`) is not built yet. See
+[`specs/ROADMAP.md`](specs/ROADMAP.md) for the full planned sequence
+and [`specs/INDEX.md`](specs/INDEX.md) for a log of what's shipped.
 
 ## Setup
 
@@ -53,6 +54,7 @@ of what's shipped.
 | `python check_auth.py` | Manually verify OAuth is working |
 | `python check_gmail.py` | Manually verify Gmail read/draft |
 | `python check_gcalendar.py` | Manually verify Calendar free/busy, slots, and holds |
+| `python check_llm.py` | Manually verify Gemini classification and reply drafting |
 | `pytest` | Run tests |
 | `mypy .` | Typecheck |
 | `ruff check .` | Lint |

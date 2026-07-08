@@ -1,6 +1,6 @@
-"""Manual end-to-end check of the llm package against the real Anthropic API.
+"""Manual end-to-end check of the llm package against the real Gemini API.
 
-Run this with a real ANTHROPIC_API_KEY in .env (see config.py). Exercises
+Run this with a real GEMINI_API_KEY in .env (see config.py). Exercises
 classify_email() against one hand-written email per intent, and each of the
 four draft_* reply-drafting functions against fixture data. Prints results
 for human review — no assertions, no Gmail/Calendar API calls (llm/ is pure).

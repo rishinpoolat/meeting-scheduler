@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from config import CLAUDE_MODEL
+from config import GEMINI_MODEL
 from gcalendar.events import Hold
 from gcalendar.slots import TimeSlot
 from gmail.read import Message
@@ -38,26 +38,26 @@ DRAFT_CASES = [
 
 
 def _client_with_text(text):
-    block = MagicMock()
-    block.text = text
     response = MagicMock()
-    response.content = [block]
+    response.text = text
     client = MagicMock()
-    client.messages.create.return_value = response
+    client.models.generate_content.return_value = response
     return client
 
 
-def _client_with_no_content():
+def _client_with_empty_text():
+    # The real SDK's .text returns None (not "") when there are no text
+    # parts, e.g. an empty/safety-blocked response - match that here.
     response = MagicMock()
-    response.content = []
+    response.text = None
     client = MagicMock()
-    client.messages.create.return_value = response
+    client.models.generate_content.return_value = response
     return client
 
 
 def _prompt(client):
-    _, kwargs = client.messages.create.call_args
-    return kwargs["messages"][0]["content"]
+    _, kwargs = client.models.generate_content.call_args
+    return kwargs["contents"]
 
 
 def test_draft_booking_confirmation_includes_start_end_in_prompt():
@@ -112,13 +112,13 @@ def test_draft_functions_use_correct_model_and_strip_response_text(draft_fn, arg
     result = draft_fn(client, *args)
 
     assert result == "Reply text."
-    _, kwargs = client.messages.create.call_args
-    assert kwargs["model"] == CLAUDE_MODEL
+    _, kwargs = client.models.generate_content.call_args
+    assert kwargs["model"] == GEMINI_MODEL
 
 
 @pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)
 def test_draft_functions_raise_value_error_on_empty_response_content(draft_fn, args):
-    client = _client_with_no_content()
+    client = _client_with_empty_text()
 
     with pytest.raises(ValueError):
         draft_fn(client, *args)

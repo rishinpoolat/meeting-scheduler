@@ -1,15 +1,17 @@
-"""Claude-based reply drafting - one concrete function per calendar outcome."""
+"""Gemini-based reply drafting - one concrete function per calendar outcome."""
 
 import re
 from datetime import datetime
 from typing import Any
 
-from config import CLAUDE_MODEL
+from google.genai import types
+
+from config import GEMINI_MODEL
 from gcalendar.events import Hold
 from gcalendar.slots import TimeSlot
 from gmail.read import Message
 
-DRAFT_MAX_TOKENS = 1024
+DRAFT_MAX_OUTPUT_TOKENS = 1024
 
 
 def draft_booking_confirmation(
@@ -79,11 +81,11 @@ def _greeting_name(from_address: str) -> str:
 
 
 def _complete(client: Any, prompt: str) -> str:
-    response = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=DRAFT_MAX_TOKENS,
-        messages=[{"role": "user", "content": prompt}],
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(max_output_tokens=DRAFT_MAX_OUTPUT_TOKENS),
     )
-    if not response.content:
-        raise ValueError("Claude response contained no content")
-    return str(response.content[0].text).strip()
+    if not response.text:
+        raise ValueError("Gemini response contained no text")
+    return str(response.text).strip()

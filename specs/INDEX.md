@@ -33,3 +33,12 @@
   short snippet was available before) and root `config.py`/`.env` for
   the Anthropic API key. `llm/{client,classify,draft}.py`, `config.py`.
   → [`specs/2026-07-07-llm-classify-draft/`](./2026-07-07-llm-classify-draft/)
+
+- **2026-07-07 — gemini-migration**: Swapped `llm/`'s backend from
+  Anthropic (Claude) to Google Gemini (`google-genai`, free tier).
+  `classify_email()` now uses Gemini structured output
+  (`response_schema` + a Pydantic model) instead of forced tool-use;
+  the raise-vs-downgrade response-boundary rule and reply-drafting
+  interface are unchanged, just re-pointed at Gemini's response shape.
+  `config.py` now reads `GEMINI_API_KEY`/`GEMINI_MODEL`.
+  → [`specs/2026-07-07-gemini-migration/`](./2026-07-07-gemini-migration/)
