@@ -44,6 +44,12 @@ and [`specs/INDEX.md`](specs/INDEX.md) for a log of what's shipped.
 
 3. Run any `check_*.py` script once to complete the interactive OAuth
    consent flow and cache a local token (e.g. `python check_auth.py`).
+4. Get a free Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey)
+   (no credit card required) and copy `.env.example` to `.env`,
+   filling in `GEMINI_API_KEY`. The free tier is rate-limited per
+   minute (varies by model) — `check_llm.py` paces its own calls to
+   stay under it, but expect a 429 if you hit the API rapidly outside
+   that script.
 
 ## Commands
 
