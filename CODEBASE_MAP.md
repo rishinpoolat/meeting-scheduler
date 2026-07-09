@@ -77,6 +77,16 @@ Loads `.env` via `python-dotenv` and exposes `GEMINI_API_KEY` /
 `GEMINI_MODEL` (shared by classification and drafting). Credential
 paths for Google auth stay in `auth/google_auth.py`, not here.
 
+## scripts/
+
+One manual, real-network verification script per feature area
+(`check_auth.py`, `check_gmail.py`, `check_gcalendar.py`,
+`check_llm.py`) — run against real Gmail/Calendar/Gemini to sanity-check
+a feature end to end, distinct from `tests/`'s mocked pytest suite. Run
+as modules (`python -m scripts.check_auth`), not as scripts
+(`python scripts/check_auth.py`), so their absolute imports
+(`from auth...`, `from gmail...`) resolve against the repo root.
+
 ## tests/
 
 pytest suite; mocks the Gmail/Calendar API clients (`unittest.mock`,
@@ -91,5 +101,5 @@ for file-ownership rules.
 
 ---
 
-Last structural update: 2026-07-07 (llm/ backend migrated from
-Anthropic to Gemini)
+Last structural update: 2026-07-09 (moved check_*.py scripts from repo
+root into scripts/)
