@@ -23,10 +23,13 @@ drafts for manual review/send — never auto-sent.
 Currently implemented: OAuth2 (Gmail + Calendar), reading unread Gmail
 messages and drafting threaded replies, the Google Calendar layer
 (free/busy checks, open-slot finding, confirmed booking, tentative
-holds), and Gemini-based email classification + reply drafting. The
-end-to-end polling loop (`agent.py`) is not built yet. See
-[`specs/ROADMAP.md`](specs/ROADMAP.md) for the full planned sequence
-and [`specs/INDEX.md`](specs/INDEX.md) for a log of what's shipped.
+holds), Gemini-based email classification + reply drafting, and
+`agent.py` wiring all of that into one polling cycle. Not yet built:
+repeating that cycle on a schedule, marking processed messages as
+read/deduped, and calling the stale-hold sweep as part of the loop
+(Feature 6). See [`specs/ROADMAP.md`](specs/ROADMAP.md) for the full
+planned sequence and [`specs/INDEX.md`](specs/INDEX.md) for a log of
+what's shipped.
 
 ## Setup
 
@@ -57,7 +60,7 @@ and [`specs/INDEX.md`](specs/INDEX.md) for a log of what's shipped.
 | Command | Purpose |
 | --- | --- |
 | `pip install -r requirements.txt` | Install dependencies |
-| `python agent.py` | Run one polling cycle (not built yet) |
+| `python agent.py` | Run one polling cycle |
 | `python -m scripts.check_auth` | Manually verify OAuth is working |
 | `python -m scripts.check_gmail` | Manually verify Gmail read/draft |
 | `python -m scripts.check_gcalendar` | Manually verify Calendar free/busy, slots, and holds |

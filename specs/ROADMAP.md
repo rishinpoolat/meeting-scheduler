@@ -64,18 +64,28 @@ ship (see `specs/INDEX.md` for the completed ones' details).
    a prior thread's offered slots. Also drafts the reply text for each
    calendar outcome. Originally built on Anthropic (Claude), migrated
    to Google Gemini (free tier) shortly after. See `specs/INDEX.md`.
-5. ⬜ **Wire the full cycle** — `agent.py` orchestrates 1–4 end to end
-   for a single unread email, including matching a reply back to its
-   original thread's holds.
+5. ✅ **Done** — **Wire the full cycle** — `agent.py` orchestrates 1–4
+   end to end for a single unread email, including matching a reply
+   back to its original thread's holds. See `specs/INDEX.md`.
 6. ⬜ **Polling loop + idempotency** — repeat cycle on a schedule,
    dedupe/mark-processed handling, the 48-hour hold-expiry sweep,
    basic error logging.
 
-## Known open decisions (surface these when spec'ing 3/4/5)
+## Known open decisions
 
-- Exact freebusy query shape and business-hours/timezone handling.
+All resolved as of Feature 5 (`specs/2026-07-09-agent-orchestration/`):
+
+- Exact freebusy query shape and business-hours/timezone handling —
+  resolved in Feature 3 (`gcalendar-holds`).
 - How a reply email gets correlated to its Gmail thread ID for hold
-  resolution.
+  resolution — resolved in Feature 5: `agent.py` unconditionally calls
+  `gcalendar.events.list_holds(thread_id=message.thread_id)` before
+  classifying every message, regardless of whether it's a fresh thread
+  or a reply.
 - What happens if a sender accepts a slot *after* its hold already
-  expired and got deleted (likely: re-check freebusy at that point and
-  book if still free, else say so).
+  expired and got deleted — resolved in Feature 5, differently than
+  originally guessed here: since a swept hold leaves no record behind,
+  `classify_email` can't distinguish this case from a genuinely
+  irrelevant reply, so it's treated the same way (skip, no draft) —
+  the "re-check freebusy and book if still free" idea would need
+  `llm/classify.py` schema changes and was ruled out of scope.

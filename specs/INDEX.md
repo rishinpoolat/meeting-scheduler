@@ -42,3 +42,11 @@
   interface are unchanged, just re-pointed at Gemini's response shape.
   `config.py` now reads `GEMINI_API_KEY`/`GEMINI_MODEL`.
   → [`specs/2026-07-07-gemini-migration/`](./2026-07-07-gemini-migration/)
+
+- **2026-07-09 — agent-orchestration**: `agent.py` wires Features 1–4
+  together into one polling cycle — for every unread message, fetches
+  the thread's existing holds, classifies intent, then books/offers
+  slots/confirms a hold/skips accordingly, and creates a Gmail draft
+  reply. Deliberately doesn't mark messages read or sweep stale holds
+  (both deferred to Feature 6). `agent.py`.
+  → [`specs/2026-07-09-agent-orchestration/`](./2026-07-09-agent-orchestration/)
