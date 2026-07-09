@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from agent import main, process_message, run_cycle
 from gcalendar.events import Hold
 from gcalendar.slots import SLOT_DURATION, TimeSlot
@@ -330,6 +332,7 @@ class TestRunCycle:
             snippet="",
         )
         with (
+            patch("agent.expire_stale_holds") as mock_sweep,
             patch("agent.get_calendar_timezone", return_value=TZ_NAME),
             patch("agent.list_unread_message_ids", return_value=["m1", "m2"]),
             patch(
@@ -339,9 +342,11 @@ class TestRunCycle:
                 "agent.get_message_body", side_effect=["body1", "body2"]
             ) as mock_get_body,
             patch("agent.process_message") as mock_process,
+            patch("agent.mark_as_read") as mock_mark_read,
         ):
             run_cycle(gmail_service, cal_service, llm_client)
 
+        mock_sweep.assert_called_once_with(cal_service)
         assert mock_get_message.call_args_list == [
             ((gmail_service, "m1"),),
             ((gmail_service, "m2"),),
@@ -368,11 +373,16 @@ class TestRunCycle:
         )
         # same now/tz_name reused across both calls
         assert first_call.args[5:] == second_call.args[5:]
+        assert mock_mark_read.call_args_list == [
+            ((gmail_service, "m1"),),
+            ((gmail_service, "m2"),),
+        ]
 
     def test_computes_now_from_calendar_timezone(self) -> None:
         gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
         fixed_now = datetime(2026, 7, 9, 12, 0, tzinfo=ZoneInfo("America/New_York"))
         with (
+            patch("agent.expire_stale_holds"),
             patch("agent.get_calendar_timezone", return_value="America/New_York"),
             patch("agent.list_unread_message_ids", return_value=["m1"]),
             patch(
@@ -382,6 +392,7 @@ class TestRunCycle:
             patch("agent.get_message_body", return_value="body"),
             patch("agent.datetime") as mock_datetime,
             patch("agent.process_message") as mock_process,
+            patch("agent.mark_as_read"),
         ):
             mock_datetime.now.return_value = fixed_now
             run_cycle(gmail_service, cal_service, llm_client)
@@ -393,14 +404,149 @@ class TestRunCycle:
     def test_with_no_unread_messages_does_nothing(self) -> None:
         gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
         with (
+            patch("agent.expire_stale_holds"),
             patch("agent.get_calendar_timezone", return_value=TZ_NAME) as mock_tz,
             patch("agent.list_unread_message_ids", return_value=[]),
             patch("agent.process_message") as mock_process,
+            patch("agent.mark_as_read") as mock_mark_read,
         ):
             run_cycle(gmail_service, cal_service, llm_client)
 
         mock_tz.assert_called_once_with(cal_service)
         mock_process.assert_not_called()
+        mock_mark_read.assert_not_called()
+
+    def test_sweeps_stale_holds_before_listing_unread_messages(self) -> None:
+        gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
+        call_order: list[str] = []
+
+        def _record_sweep(*_a: object, **_k: object) -> None:
+            call_order.append("sweep")
+
+        def _record_list(*_a: object, **_k: object) -> list[str]:
+            call_order.append("list")
+            return []
+
+        with (
+            patch("agent.expire_stale_holds", side_effect=_record_sweep),
+            patch("agent.get_calendar_timezone", return_value=TZ_NAME),
+            patch("agent.list_unread_message_ids", side_effect=_record_list),
+        ):
+            run_cycle(gmail_service, cal_service, llm_client)
+
+        assert call_order == ["sweep", "list"]
+
+    def test_sweep_failure_is_not_caught_and_propagates(self) -> None:
+        gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
+        with (
+            patch("agent.expire_stale_holds", side_effect=Exception("sweep boom")),
+            patch("agent.get_calendar_timezone", return_value=TZ_NAME),
+            patch("agent.list_unread_message_ids") as mock_list,
+        ):
+            with pytest.raises(Exception, match="sweep boom"):
+                run_cycle(gmail_service, cal_service, llm_client)
+
+        mock_list.assert_not_called()
+
+    def test_marks_message_read_only_after_successful_processing(self) -> None:
+        gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
+        with (
+            patch("agent.expire_stale_holds"),
+            patch("agent.get_calendar_timezone", return_value=TZ_NAME),
+            patch("agent.list_unread_message_ids", return_value=["m1"]),
+            patch("agent.get_message", return_value=MESSAGE),
+            patch("agent.get_message_body", return_value="body"),
+            patch("agent.process_message") as mock_process,
+            patch("agent.mark_as_read") as mock_mark_read,
+        ):
+            run_cycle(gmail_service, cal_service, llm_client)
+
+        mock_process.assert_called_once()
+        mock_mark_read.assert_called_once_with(gmail_service, "m1")
+
+    def test_process_message_failure_is_isolated_and_message_left_unread(
+        self,
+    ) -> None:
+        gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
+        with (
+            patch("agent.expire_stale_holds"),
+            patch("agent.get_calendar_timezone", return_value=TZ_NAME),
+            patch("agent.list_unread_message_ids", return_value=["m1", "m2"]),
+            patch("agent.get_message", return_value=MESSAGE),
+            patch("agent.get_message_body", return_value="body"),
+            patch(
+                "agent.process_message", side_effect=[Exception("boom"), None]
+            ) as mock_process,
+            patch("agent.mark_as_read") as mock_mark_read,
+            patch("agent.logger") as mock_logger,
+        ):
+            run_cycle(gmail_service, cal_service, llm_client)
+
+        assert mock_process.call_count == 2
+        mock_mark_read.assert_called_once_with(gmail_service, "m2")
+        mock_logger.exception.assert_called_once()
+        assert mock_logger.exception.call_args.args[1] == "m1"
+
+    def test_message_fetch_failure_is_isolated_like_a_processing_failure(
+        self,
+    ) -> None:
+        gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
+        with (
+            patch("agent.expire_stale_holds"),
+            patch("agent.get_calendar_timezone", return_value=TZ_NAME),
+            patch("agent.list_unread_message_ids", return_value=["m1", "m2"]),
+            patch(
+                "agent.get_message", side_effect=[Exception("fetch failed"), MESSAGE]
+            ),
+            patch("agent.get_message_body", return_value="body"),
+            patch("agent.process_message") as mock_process,
+            patch("agent.mark_as_read") as mock_mark_read,
+        ):
+            run_cycle(gmail_service, cal_service, llm_client)
+
+        mock_process.assert_called_once()
+        mock_mark_read.assert_called_once_with(gmail_service, "m2")
+
+    def test_mark_as_read_failure_does_not_prevent_processing_next_message(
+        self,
+    ) -> None:
+        gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
+        with (
+            patch("agent.expire_stale_holds"),
+            patch("agent.get_calendar_timezone", return_value=TZ_NAME),
+            patch("agent.list_unread_message_ids", return_value=["m1", "m2"]),
+            patch("agent.get_message", return_value=MESSAGE),
+            patch("agent.get_message_body", return_value="body"),
+            patch("agent.process_message") as mock_process,
+            patch(
+                "agent.mark_as_read", side_effect=[Exception("mark failed"), None]
+            ) as mock_mark_read,
+        ):
+            run_cycle(gmail_service, cal_service, llm_client)
+
+        assert mock_process.call_count == 2
+        assert mock_mark_read.call_count == 2
+
+    def test_mark_as_read_failure_is_logged_distinctly_from_a_processing_failure(
+        self,
+    ) -> None:
+        gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
+        with (
+            patch("agent.expire_stale_holds"),
+            patch("agent.get_calendar_timezone", return_value=TZ_NAME),
+            patch("agent.list_unread_message_ids", return_value=["m1"]),
+            patch("agent.get_message", return_value=MESSAGE),
+            patch("agent.get_message_body", return_value="body"),
+            patch("agent.process_message"),
+            patch("agent.mark_as_read", side_effect=Exception("mark failed")),
+            patch("agent.logger") as mock_logger,
+        ):
+            run_cycle(gmail_service, cal_service, llm_client)
+
+        mock_logger.exception.assert_called_once()
+        log_message = mock_logger.exception.call_args.args[0]
+        assert "may be reprocessed" in log_message
+        assert "leaving unread for retry" not in log_message
 
 
 def test_main_wires_real_services_into_run_cycle() -> None:

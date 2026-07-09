@@ -12,10 +12,17 @@
 
 ## agent.py
 
-Entry point (`python agent.py` / `main()`). `run_cycle()` fetches this
-cycle's `now`/timezone once (`get_calendar_timezone()` +
-`datetime.now(ZoneInfo(...))`), lists unread messages, and calls
-`process_message()` per message with that shared `now`/`tz_name`.
+Entry point (`python agent.py` / `main()`) — a manually-run, **single
+pass**, by design: no internal scheduling loop or polling interval
+(considered and explicitly rejected). `run_cycle()` sweeps stale holds
+(`gcalendar.events.expire_stale_holds()`) first, then fetches this
+run's `now`/timezone once (`get_calendar_timezone()` +
+`datetime.now(ZoneInfo(...))`), lists unread messages, and for each
+one wraps fetch + `process_message()` + `gmail.read.mark_as_read()` in
+a single try/except — a failure anywhere in that sequence is logged
+(via `logging.getLogger(__name__)`, first use of `logging` in this
+codebase) with the message ID and leaves that message unread to retry
+on the next manual run, without aborting the rest of the run.
 `process_message()` unconditionally fetches
 `gcalendar.events.list_holds(thread_id=message.thread_id)` *before*
 classifying — this is what wires thread-hold-acceptance matching into
@@ -23,15 +30,13 @@ classifying — this is what wires thread-hold-acceptance matching into
 `Classification.intent`: `propose_time` books if free (else drafts
 "unavailable"), `ask_availability` creates one tentative hold per
 offered slot, `accept_slot` confirms the matched hold, `irrelevant` is
-a no-op. `classify_email()` returns only a proposed *start* time for
-`propose_time`, so `agent.py` reuses `gcalendar.slots.SLOT_DURATION`
-(30 min) as the assumed meeting length for both the free/busy check
-and the booking. Deliberately does **not** mark messages read or call
-`gcalendar.events.expire_stale_holds()` — both deferred to Feature 6
-(the scheduling loop + idempotency), so re-running `python agent.py`
-on the same unread inbox will redraft replies until that lands. See
-`specs/2026-07-09-agent-orchestration/spec.md` for the full decision
-log.
+a no-op (but still gets marked read, so spam isn't reclassified by
+Gemini on every re-run). `classify_email()` returns only a proposed
+*start* time for `propose_time`, so `agent.py` reuses
+`gcalendar.slots.SLOT_DURATION` (30 min) as the assumed meeting length
+for both the free/busy check and the booking. See
+`specs/2026-07-09-agent-orchestration/spec.md` and
+`specs/2026-07-09-polling-loop/spec.md` for the full decision log.
 
 ## auth/
 
@@ -43,11 +48,13 @@ combined Gmail + Calendar scopes. `google_auth.py` exposes
 ## gmail/
 
 Gmail API wrapper. `client.py` builds the authenticated service via
-`auth.get_credentials()`; `read.py` lists unread inbox messages and
-fetches header metadata (`Message` dataclass — no body parsing yet);
-`draft.py` creates threaded draft replies (`In-Reply-To`/`References`/
-`threadId`). No sender/relevance filtering here by design — that's
-Claude's job (planned `llm/`).
+`auth.get_credentials()`; `read.py` lists unread inbox messages,
+fetches header metadata (`Message` dataclass) and body text, and marks
+a message read via `mark_as_read()` (removes the `UNREAD` label, used
+by `agent.py` once a message is successfully processed so re-running
+`agent.py` doesn't reprocess it); `draft.py` creates threaded draft
+replies (`In-Reply-To`/`References`/`threadId`). No sender/relevance
+filtering here by design — that's `llm/`'s job.
 
 ## gcalendar/
 
@@ -119,5 +126,6 @@ for file-ownership rules.
 
 ---
 
-Last structural update: 2026-07-09 (added agent.py, the end-to-end
-orchestrator wiring gmail/, gcalendar/, and llm/ together)
+Last structural update: 2026-07-09 (agent.py now marks processed
+messages read, sweeps stale holds, and isolates per-message failures —
+still a manually-run single pass, no scheduling loop)
