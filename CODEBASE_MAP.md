@@ -10,10 +10,28 @@
 > PLANNED describe the intended structure so features can be planned
 > against it; drop the marker once each is actually built.
 
-## agent.py (PLANNED)
+## agent.py
 
-Entry point. Orchestrates one polling cycle: fetch unread emails,
-classify intent, act (book event or find slots), draft reply.
+Entry point (`python agent.py` / `main()`). `run_cycle()` fetches this
+cycle's `now`/timezone once (`get_calendar_timezone()` +
+`datetime.now(ZoneInfo(...))`), lists unread messages, and calls
+`process_message()` per message with that shared `now`/`tz_name`.
+`process_message()` unconditionally fetches
+`gcalendar.events.list_holds(thread_id=message.thread_id)` *before*
+classifying — this is what wires thread-hold-acceptance matching into
+`llm.classify.classify_email()` — then dispatches on
+`Classification.intent`: `propose_time` books if free (else drafts
+"unavailable"), `ask_availability` creates one tentative hold per
+offered slot, `accept_slot` confirms the matched hold, `irrelevant` is
+a no-op. `classify_email()` returns only a proposed *start* time for
+`propose_time`, so `agent.py` reuses `gcalendar.slots.SLOT_DURATION`
+(30 min) as the assumed meeting length for both the free/busy check
+and the booking. Deliberately does **not** mark messages read or call
+`gcalendar.events.expire_stale_holds()` — both deferred to Feature 6
+(the scheduling loop + idempotency), so re-running `python agent.py`
+on the same unread inbox will redraft replies until that lands. See
+`specs/2026-07-09-agent-orchestration/spec.md` for the full decision
+log.
 
 ## auth/
 
@@ -69,13 +87,23 @@ spec for the raise-vs-downgrade rule); `draft.py` has four
 outcome-specific functions (not one polymorphic type) that draft reply
 text via plain Gemini completions, one per calendar outcome. Pure
 module — no Gmail/Calendar API calls happen here; the orchestrator
-(planned `agent.py`) wires `llm/` together with `gmail/`/`gcalendar/`.
+(`agent.py`) wires `llm/` together with `gmail/`/`gcalendar/`.
 
 ## config.py
 
 Loads `.env` via `python-dotenv` and exposes `GEMINI_API_KEY` /
 `GEMINI_MODEL` (shared by classification and drafting). Credential
 paths for Google auth stay in `auth/google_auth.py`, not here.
+
+## scripts/
+
+One manual, real-network verification script per feature area
+(`check_auth.py`, `check_gmail.py`, `check_gcalendar.py`,
+`check_llm.py`) — run against real Gmail/Calendar/Gemini to sanity-check
+a feature end to end, distinct from `tests/`'s mocked pytest suite. Run
+as modules (`python -m scripts.check_auth`), not as scripts
+(`python scripts/check_auth.py`), so their absolute imports
+(`from auth...`, `from gmail...`) resolve against the repo root.
 
 ## tests/
 
@@ -91,5 +119,5 @@ for file-ownership rules.
 
 ---
 
-Last structural update: 2026-07-07 (llm/ backend migrated from
-Anthropic to Gemini)
+Last structural update: 2026-07-09 (added agent.py, the end-to-end
+orchestrator wiring gmail/, gcalendar/, and llm/ together)

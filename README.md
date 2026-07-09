@@ -23,10 +23,13 @@ drafts for manual review/send — never auto-sent.
 Currently implemented: OAuth2 (Gmail + Calendar), reading unread Gmail
 messages and drafting threaded replies, the Google Calendar layer
 (free/busy checks, open-slot finding, confirmed booking, tentative
-holds), and Gemini-based email classification + reply drafting. The
-end-to-end polling loop (`agent.py`) is not built yet. See
-[`specs/ROADMAP.md`](specs/ROADMAP.md) for the full planned sequence
-and [`specs/INDEX.md`](specs/INDEX.md) for a log of what's shipped.
+holds), Gemini-based email classification + reply drafting, and
+`agent.py` wiring all of that into one polling cycle. Not yet built:
+repeating that cycle on a schedule, marking processed messages as
+read/deduped, and calling the stale-hold sweep as part of the loop
+(Feature 6). See [`specs/ROADMAP.md`](specs/ROADMAP.md) for the full
+planned sequence and [`specs/INDEX.md`](specs/INDEX.md) for a log of
+what's shipped.
 
 ## Setup
 
@@ -42,29 +45,34 @@ and [`specs/INDEX.md`](specs/INDEX.md) for a log of what's shipped.
    pip install -r requirements.txt
    ```
 
-3. Run any `check_*.py` script once to complete the interactive OAuth
-   consent flow and cache a local token (e.g. `python check_auth.py`).
+3. Run any `scripts/check_*.py` script once to complete the interactive
+   OAuth consent flow and cache a local token (e.g.
+   `python -m scripts.check_auth`).
 4. Get a free Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey)
    (no credit card required) and copy `.env.example` to `.env`,
    filling in `GEMINI_API_KEY`. The free tier is rate-limited per
-   minute (varies by model) — `check_llm.py` paces its own calls to
-   stay under it, but expect a 429 if you hit the API rapidly outside
-   that script.
+   minute (varies by model) — `scripts/check_llm.py` paces its own
+   calls to stay under it, but expect a 429 if you hit the API rapidly
+   outside that script.
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
 | `pip install -r requirements.txt` | Install dependencies |
-| `python agent.py` | Run one polling cycle (not built yet) |
-| `python check_auth.py` | Manually verify OAuth is working |
-| `python check_gmail.py` | Manually verify Gmail read/draft |
-| `python check_gcalendar.py` | Manually verify Calendar free/busy, slots, and holds |
-| `python check_llm.py` | Manually verify Gemini classification and reply drafting |
+| `python agent.py` | Run one polling cycle |
+| `python -m scripts.check_auth` | Manually verify OAuth is working |
+| `python -m scripts.check_gmail` | Manually verify Gmail read/draft |
+| `python -m scripts.check_gcalendar` | Manually verify Calendar free/busy, slots, and holds |
+| `python -m scripts.check_llm` | Manually verify Gemini classification and reply drafting |
 | `pytest` | Run tests |
 | `mypy .` | Typecheck |
 | `ruff check .` | Lint |
 | `ruff format .` | Format |
+
+Scripts under `scripts/` are run as modules (`python -m scripts.x`, not
+`python scripts/x.py`) so their `from auth...`/`from gmail...` etc.
+imports resolve against the repo root.
 
 ## Project layout
 
