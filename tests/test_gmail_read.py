@@ -1,7 +1,12 @@
 import base64
 from unittest.mock import MagicMock
 
-from gmail.read import get_message, get_message_body, list_unread_message_ids
+from gmail.read import (
+    get_message,
+    get_message_body,
+    list_unread_message_ids,
+    mark_as_read,
+)
 
 
 def _b64url_nopad(text: str) -> str:
@@ -38,6 +43,16 @@ def test_list_unread_message_ids_handles_empty_inbox():
     result = list_unread_message_ids(service)
 
     assert result == []
+
+
+def test_mark_as_read_removes_unread_label():
+    service = MagicMock()
+
+    mark_as_read(service, "msg-1")
+
+    service.users.return_value.messages.return_value.modify.assert_called_once_with(
+        userId="me", id="msg-1", body={"removeLabelIds": ["UNREAD"]}
+    )
 
 
 def test_get_message_parses_headers_case_insensitively():

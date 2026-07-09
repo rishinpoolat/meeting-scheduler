@@ -29,6 +29,13 @@ def list_unread_message_ids(service: Any, max_results: int = 50) -> list[str]:
     return [item["id"] for item in response.get("messages", [])]
 
 
+def mark_as_read(service: Any, message_id: str) -> None:
+    """Remove the UNREAD label so a processed message isn't reclassified next run."""
+    service.users().messages().modify(
+        userId="me", id=message_id, body={"removeLabelIds": ["UNREAD"]}
+    ).execute()
+
+
 def get_message(service: Any, message_id: str) -> Message:
     """Fetch header metadata + snippet for one message (no body parsing)."""
     response = (

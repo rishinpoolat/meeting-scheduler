@@ -47,6 +47,17 @@
   together into one polling cycle — for every unread message, fetches
   the thread's existing holds, classifies intent, then books/offers
   slots/confirms a hold/skips accordingly, and creates a Gmail draft
-  reply. Deliberately doesn't mark messages read or sweep stale holds
-  (both deferred to Feature 6). `agent.py`.
+  reply. `agent.py`.
   → [`specs/2026-07-09-agent-orchestration/`](./2026-07-09-agent-orchestration/)
+
+- **2026-07-09 — polling-loop**: Idempotency + basic error logging for
+  `agent.py`, descoped from an originally-planned scheduling loop — the
+  developer chose to keep `agent.py` a manually-run, single-pass
+  script instead. Each run now sweeps holds older than 48h
+  (`gcalendar.events.expire_stale_holds()`), marks every processed
+  message read via new `gmail.read.mark_as_read()` (including
+  `irrelevant` ones, so spam isn't reclassified on the next run), and
+  isolates per-message failures (logged with the message ID, left
+  unread to retry) instead of aborting the whole run. `agent.py`,
+  `gmail/read.py`.
+  → [`specs/2026-07-09-polling-loop/`](./2026-07-09-polling-loop/)

@@ -1,17 +1,31 @@
 """Entry point: orchestrates one Gmail-polling cycle end to end."""
 
+import logging
 from datetime import datetime
 from email.utils import parseaddr
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from gcalendar.client import get_service as get_calendar_service
-from gcalendar.events import Hold, book_event, confirm_hold, create_hold, list_holds
+from gcalendar.events import (
+    Hold,
+    book_event,
+    confirm_hold,
+    create_hold,
+    expire_stale_holds,
+    list_holds,
+)
 from gcalendar.freebusy import get_calendar_timezone, is_slot_free
 from gcalendar.slots import SLOT_DURATION, find_open_slots
 from gmail.client import get_service as get_gmail_service
 from gmail.draft import create_draft_reply
-from gmail.read import Message, get_message, get_message_body, list_unread_message_ids
+from gmail.read import (
+    Message,
+    get_message,
+    get_message_body,
+    list_unread_message_ids,
+    mark_as_read,
+)
 from llm.classify import classify_email
 from llm.client import get_client as get_llm_client
 from llm.draft import (
@@ -21,6 +35,8 @@ from llm.draft import (
     draft_time_unavailable,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def main() -> None:
     """Run one polling cycle against the real Gmail/Calendar/Gemini APIs."""
@@ -28,15 +44,31 @@ def main() -> None:
 
 
 def run_cycle(gmail_service: Any, cal_service: Any, llm_client: Any) -> None:
-    """List unread messages and process each one."""
+    """Sweep stale holds, then process and mark read every unread message."""
+    expire_stale_holds(cal_service)
     tz_name = get_calendar_timezone(cal_service)
     now = datetime.now(ZoneInfo(tz_name))
     for message_id in list_unread_message_ids(gmail_service):
-        message = get_message(gmail_service, message_id)
-        body = get_message_body(gmail_service, message_id)
-        process_message(
-            gmail_service, cal_service, llm_client, message, body, now, tz_name
-        )
+        try:
+            message = get_message(gmail_service, message_id)
+            body = get_message_body(gmail_service, message_id)
+            process_message(
+                gmail_service, cal_service, llm_client, message, body, now, tz_name
+            )
+        except Exception:
+            logger.exception(
+                "Failed to process message id=%s; leaving unread for retry",
+                message_id,
+            )
+            continue
+        try:
+            mark_as_read(gmail_service, message_id)
+        except Exception:
+            logger.exception(
+                "Processed message id=%s but failed to mark it read; it may be "
+                "reprocessed next run",
+                message_id,
+            )
 
 
 def process_message(

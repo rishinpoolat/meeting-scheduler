@@ -10,10 +10,12 @@
 1. **Auth** — one-time OAuth2 consent, refreshable token stored
    locally, covering both Gmail and Calendar scopes.
 2. **Poll** — list unread messages in the inbox (Gmail
-   `users.messages.list`, `maxResults=50`). Only the 50 most recent
-   unread are processed per cycle; anything beyond that waits for the
-   next cycle. No sender/address filtering — deciding what's a real
-   enquiry vs. spam/newsletters is Claude's job (step 3).
+   `users.messages.list`, `maxResults=50`) each time `agent.py` is run
+   (a manually-invoked, single-pass script — no internal scheduling).
+   Only the 50 most recent unread are processed per run; anything
+   beyond that waits for the next run. No sender/address filtering —
+   deciding what's a real enquiry vs. spam/newsletters is the LLM's
+   job (step 3).
 3. **Classify** — hand the email text to Claude (tool use) to decide:
    proposes a specific time / asks for availability / neither (skip).
 4. **Check calendar** — Calendar `freebusy.query` (or `events.list`)
@@ -67,9 +69,13 @@ ship (see `specs/INDEX.md` for the completed ones' details).
 5. ✅ **Done** — **Wire the full cycle** — `agent.py` orchestrates 1–4
    end to end for a single unread email, including matching a reply
    back to its original thread's holds. See `specs/INDEX.md`.
-6. ⬜ **Polling loop + idempotency** — repeat cycle on a schedule,
-   dedupe/mark-processed handling, the 48-hour hold-expiry sweep,
-   basic error logging.
+6. ✅ **Done** — **Idempotency + basic error logging** — descoped from
+   its original "repeat cycle on a schedule" wording: the developer
+   decided `agent.py` should stay a manually-run, single-pass script
+   (no internal loop, no polling interval). What shipped: mark-
+   processed handling (so re-running doesn't redraft the same
+   replies), the 48-hour hold-expiry sweep wired into each run, and
+   per-message error isolation/logging. See `specs/INDEX.md`.
 
 ## Known open decisions
 
