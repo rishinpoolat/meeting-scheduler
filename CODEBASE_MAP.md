@@ -46,9 +46,10 @@ Gemini on every re-run). `classify_email()` returns only a proposed
 for both the free/busy check and the booking. See
 `specs/2026-07-09-agent-orchestration/spec.md`,
 `specs/2026-07-09-polling-loop/spec.md`,
-`specs/2026-07-12-draft-signature-name/spec.md`, and
-`specs/2026-07-12-earliest-offer-time/spec.md` for the full decision
-log.
+`specs/2026-07-12-draft-signature-name/spec.md`,
+`specs/2026-07-12-earliest-offer-time/spec.md`, and
+`specs/2026-07-12-verbatim-meeting-times/spec.md` for the full
+decision log.
 
 ## auth/
 
@@ -129,9 +130,23 @@ text via plain Gemini completions, one per calendar outcome, each
 taking a `your_name: str` (the account's display name, fetched once
 per run by `agent.py` via `gmail.profile.get_display_name()`) so the
 prompt tells Gemini who to sign the reply as instead of leaving it a
-placeholder. Pure module — no Gmail/Calendar API calls happen here;
-the orchestrator (`agent.py`) wires `llm/` together with
-`gmail/`/`gcalendar/`.
+placeholder. Gemini is never trusted to write an actual date/time into
+the drafted text itself — it was found (live-verified against the
+real API) to non-deterministically corrupt an exact time when asked
+to freely reformat one into prose. Instead every function that has a
+time to communicate asks Gemini to leave a literal token
+(`[[MEETING_TIME]]` or, for the multi-slot case, `[[SLOT_LIST]]`)
+where the value belongs; `_complete_with_placeholder()` then requires
+that token to be present and substitutes it with the real,
+deterministically-formatted value from `_format_range()` — raising
+`ValueError` (routed through `agent.py`'s existing per-message
+retry-next-run handling) if the placeholder is missing, rather than
+risking an unverified or corrupted time reaching a draft. This
+verify-then-substitute pattern is the general approach for any future
+LLM output that must contain an exact, non-negotiable value — see
+`specs/2026-07-12-verbatim-meeting-times/spec.md`. Pure module — no
+Gmail/Calendar API calls happen here; the orchestrator (`agent.py`)
+wires `llm/` together with `gmail/`/`gcalendar/`.
 
 ## config.py
 
@@ -171,4 +186,8 @@ each run's unread messages by both count and a 2-day window to avoid
 re-hitting Gemini's free-tier rate limit; `llm.classify` now extracts
 an optional `earliest_offer_time` for `ask_availability` so
 `gcalendar.slots.find_open_slots()` respects a sender-stated timeframe
-preference instead of always starting from `now`)
+preference instead of always starting from `now`; `llm/draft.py` no
+longer trusts Gemini to write dates/times into drafts itself —
+verify-then-substitute a literal placeholder token instead, since
+free-text reformatting was found to non-deterministically corrupt
+exact times)
