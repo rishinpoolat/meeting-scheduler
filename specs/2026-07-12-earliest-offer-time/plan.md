@@ -10,11 +10,9 @@
 
 ## In Progress
 
-Implementation done, quality gate passed. Awaiting the developer's
-explicit pre-commit approval (per testing skill) before this moves to
-Completed and gets committed.
+(empty)
 
-## Completed (pending commit)
+## Completed
 
 - [x] `llm/classify.py`: `ClassificationResult.earliest_offer_time`
       field, `Classification.earliest_offer_time` field, renamed
@@ -52,3 +50,9 @@ Completed and gets committed.
   a line right at the 88-char boundary (confirmed fine via
   `ruff format --check`) and no explicit test for `earliest == now`
   (low risk, `max()`'s tie-breaking is inconsequential either way).
+
+**Committed:** 2026-07-12, `fix/earliest-offer-time` commit `003bd02`
+(plus a follow-up commit `d7a9da3` on the same branch fixing a related
+Gemini thinking-token truncation bug found live-testing this feature).
+
+**Merged:** 2026-07-12 to `main` via PR #8, merge commit `6e1b483`.

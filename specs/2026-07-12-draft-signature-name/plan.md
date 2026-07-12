@@ -10,10 +10,16 @@
 
 ## In Progress
 
-Live verification against the real account (delete `token.json`,
-re-consent with the new scope, confirm a real drafted reply signs off
-correctly) is still outstanding — needs the developer's interactive
-OAuth consent, not something committable/testable by the agent alone.
+Live verification did happen (multiple real `python agent.py` runs
+against the real inbox/calendar, which is what surfaced the
+downstream bugs fixed in `earliest-offer-time` and
+`verbatim-meeting-times`). One cosmetic step is still on the
+developer: the Gmail account's own "Send mail as" name field was
+still unset as of the last check, so drafts fall back to the
+local-part of the email address rather than showing a real display
+name — set it in Gmail Settings → Accounts and Import → Send mail as
+→ edit info, and `get_display_name()` will pick it up automatically
+next run, no code change needed.
 
 ## Completed
 
@@ -53,3 +59,7 @@ developer gave explicit pre-commit approval.
   chain, minimal-scope justification for `gmail.settings.basic`, and
   that the new tests genuinely exercise the fallback/raise branches
   rather than just the happy path.
+
+**Merged:** 2026-07-12 to `main` via PR #8, merge commit `6e1b483`
+(bundled with `earliest-offer-time` and `verbatim-meeting-times`,
+stacked on this branch).

@@ -61,3 +61,36 @@
   unread to retry) instead of aborting the whole run. `agent.py`,
   `gmail/read.py`.
   → [`specs/2026-07-09-polling-loop/`](./2026-07-09-polling-loop/)
+
+- **2026-07-12 — draft-signature-name**: Drafted replies sign off with
+  the account's real Gmail display name (`gmail/profile.py`'s
+  `get_display_name()`, via `sendAs.list`'s `isPrimary` entry, needing
+  the new `gmail.settings.basic` scope) instead of a `[Your Name]`
+  placeholder. Also caps `agent.py`'s per-run unread polling by both a
+  2-day window and a 5-message count, to stay under Gemini's free-tier
+  rate limit. `gmail/profile.py`, `auth/google_auth.py`, `agent.py`,
+  `gmail/read.py`.
+  → [`specs/2026-07-12-draft-signature-name/`](./2026-07-12-draft-signature-name/)
+
+- **2026-07-12 — earliest-offer-time**: `ask_availability` now
+  respects a sender-stated timeframe preference (e.g. "next week") via
+  a new `earliest_offer_time` field on `Classification`, threaded into
+  `gcalendar.slots.find_open_slots()`'s new `earliest` param
+  (clamped to never precede `now`). A malformed value falls back to
+  `None` rather than downgrading the whole classification, unlike
+  `proposed_time`/`accepted_slot_index` — deliberate asymmetry, see
+  spec. Also disables Gemini's "thinking" tokens
+  (`thinking_budget=0`) in `llm/classify.py` and `llm/draft.py` after
+  a real run hit `MAX_TOKENS` truncation. `llm/classify.py`,
+  `gcalendar/slots.py`, `agent.py`.
+  → [`specs/2026-07-12-earliest-offer-time/`](./2026-07-12-earliest-offer-time/)
+
+- **2026-07-12 — verbatim-meeting-times**: Gemini no longer writes
+  meeting dates/times into drafted replies itself — a real drafted
+  confirmation showed a wrong time after Gemini non-deterministically
+  corrupted a correct value while reformatting it into prose. `llm/draft.py`'s
+  four functions now have Gemini leave a literal placeholder
+  (`[[MEETING_TIME]]`/`[[SLOT_LIST]]`) which Python substitutes with a
+  guaranteed-correct, Python-formatted value, raising if the
+  placeholder is missing or duplicated. `llm/draft.py`.
+  → [`specs/2026-07-12-verbatim-meeting-times/`](./2026-07-12-verbatim-meeting-times/)

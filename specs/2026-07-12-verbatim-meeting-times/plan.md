@@ -10,11 +10,9 @@
 
 ## In Progress
 
-Implementation done, quality gate passed twice (initial + a
-follow-up fix from review). Awaiting the developer's explicit
-pre-commit approval before this moves to Completed.
+(empty)
 
-## Completed (pending commit)
+## Completed
 
 - [x] `llm/draft.py`: placeholder constants, `_format_date`/
       `_format_time`/`_format_range` rewritten to produce a friendly
@@ -48,6 +46,14 @@ pre-commit approval before this moves to Completed.
   (`str.count`/`str.replace` non-overlapping semantics agree, no
   remaining edge case), confirmed the new test exercises the real bug
   scenario through the public function, no blockers.
+
+**Committed:** 2026-07-12, `fix/verbatim-meeting-times` commit
+`1f0d0bb` (also folded in an unrelated one-line `config.py` fix found
+during this session: `GEMINI_MODEL`'s default had been accidentally
+changed to the non-existent `"gemini-3.5-flash"`, causing real `403
+PERMISSION_DENIED` errors — reverted to `"gemini-2.5-flash"`).
+
+**Merged:** 2026-07-12 to `main` via PR #8, merge commit `6e1b483`.
 
 **Still open:** live end-to-end verification against the real Gemini
 API is blocked by the free tier's exhausted daily quota (20
