@@ -18,14 +18,24 @@ class Message:
     snippet: str
 
 
-def list_unread_message_ids(service: Any, max_results: int = 50) -> list[str]:
-    """Return up to `max_results` unread inbox message IDs, most recent first."""
-    response = (
-        service.users()
-        .messages()
-        .list(userId="me", labelIds=["INBOX", "UNREAD"], maxResults=max_results)
-        .execute()
-    )
+def list_unread_message_ids(
+    service: Any, max_results: int = 50, newer_than_days: int | None = None
+) -> list[str]:
+    """Return up to `max_results` unread inbox message IDs, most recent first.
+
+    `newer_than_days`, if given, restricts to messages Gmail considers
+    newer than that many days old (its `newer_than:Nd` search operator)
+    on top of the `max_results` cap - the two combine, they don't
+    replace each other.
+    """
+    kwargs: dict[str, Any] = {
+        "userId": "me",
+        "labelIds": ["INBOX", "UNREAD"],
+        "maxResults": max_results,
+    }
+    if newer_than_days is not None:
+        kwargs["q"] = f"newer_than:{newer_than_days}d"
+    response = service.users().messages().list(**kwargs).execute()
     return [item["id"] for item in response.get("messages", [])]
 
 

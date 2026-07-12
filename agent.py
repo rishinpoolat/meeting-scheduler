@@ -38,6 +38,15 @@ from llm.draft import (
 
 logger = logging.getLogger(__name__)
 
+# Unread messages one run considers: at most UNREAD_BATCH_SIZE, and only
+# those from the last UNREAD_WINDOW_DAYS days - both apply together. The
+# count cap exists to stay well under Gemini's free-tier rate limit even
+# if the date window catches a burst of unread mail.
+# gmail.read.list_unread_message_ids's own defaults stay wider (no date
+# filter, higher count) for general-purpose use e.g. scripts/check_gmail.py.
+UNREAD_BATCH_SIZE = 5
+UNREAD_WINDOW_DAYS = 2
+
 
 def main() -> None:
     """Run one polling cycle against the real Gmail/Calendar/Gemini APIs."""
@@ -50,7 +59,9 @@ def run_cycle(gmail_service: Any, cal_service: Any, llm_client: Any) -> None:
     tz_name = get_calendar_timezone(cal_service)
     now = datetime.now(ZoneInfo(tz_name))
     your_name = get_display_name(gmail_service)
-    for message_id in list_unread_message_ids(gmail_service):
+    for message_id in list_unread_message_ids(
+        gmail_service, max_results=UNREAD_BATCH_SIZE, newer_than_days=UNREAD_WINDOW_DAYS
+    ):
         try:
             message = get_message(gmail_service, message_id)
             body = get_message_body(gmail_service, message_id)

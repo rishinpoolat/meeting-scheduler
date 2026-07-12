@@ -4,7 +4,13 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from agent import main, process_message, run_cycle
+from agent import (
+    UNREAD_BATCH_SIZE,
+    UNREAD_WINDOW_DAYS,
+    main,
+    process_message,
+    run_cycle,
+)
 from gcalendar.events import Hold
 from gcalendar.slots import SLOT_DURATION, TimeSlot
 from gmail.read import Message
@@ -401,7 +407,9 @@ class TestRunCycle:
             patch("agent.expire_stale_holds") as mock_sweep,
             patch("agent.get_calendar_timezone", return_value=TZ_NAME),
             patch("agent.get_display_name", return_value=YOUR_NAME),
-            patch("agent.list_unread_message_ids", return_value=["m1", "m2"]),
+            patch(
+                "agent.list_unread_message_ids", return_value=["m1", "m2"]
+            ) as mock_list_unread,
             patch(
                 "agent.get_message", side_effect=[message_1, message_2]
             ) as mock_get_message,
@@ -414,6 +422,11 @@ class TestRunCycle:
             run_cycle(gmail_service, cal_service, llm_client)
 
         mock_sweep.assert_called_once_with(cal_service)
+        mock_list_unread.assert_called_once_with(
+            gmail_service,
+            max_results=UNREAD_BATCH_SIZE,
+            newer_than_days=UNREAD_WINDOW_DAYS,
+        )
         assert mock_get_message.call_args_list == [
             ((gmail_service, "m1"),),
             ((gmail_service, "m2"),),

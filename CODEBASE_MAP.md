@@ -19,7 +19,11 @@ pass**, by design: no internal scheduling loop or polling interval
 run's `now`/timezone (`get_calendar_timezone()` +
 `datetime.now(ZoneInfo(...))`) and the account's display name
 (`gmail.profile.get_display_name()`, used to sign drafted replies)
-once each, lists unread messages, and for each
+once each, lists unread messages (capped by both `UNREAD_BATCH_SIZE`
+(5) and `UNREAD_WINDOW_DAYS` (2, via Gmail's `newer_than:Nd` search
+operator) together — a rate-limit-driven safeguard so a burst of
+unread mail within the window still can't blow through Gemini's
+free-tier per-minute quota in one run), and for each
 one wraps fetch + `process_message()` + `gmail.read.mark_as_read()` in
 a single try/except — a failure anywhere in that sequence is logged
 (via `logging.getLogger(__name__)`, first use of `logging` in this
@@ -146,4 +150,6 @@ for file-ownership rules.
 Last structural update: 2026-07-12 (new `gmail/profile.py` reads the
 account's real display name so drafted replies sign off with it
 instead of a placeholder; `llm/draft.py`'s four functions and
-`agent.py`'s threading updated accordingly)
+`agent.py`'s threading updated accordingly; `agent.py` also now caps
+each run's unread messages by both count and a 2-day window to avoid
+re-hitting Gemini's free-tier rate limit)
