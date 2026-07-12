@@ -19,6 +19,7 @@ from gcalendar.freebusy import get_calendar_timezone, is_slot_free
 from gcalendar.slots import SLOT_DURATION, find_open_slots
 from gmail.client import get_service as get_gmail_service
 from gmail.draft import create_draft_reply
+from gmail.profile import get_display_name
 from gmail.read import (
     Message,
     get_message,
@@ -37,6 +38,15 @@ from llm.draft import (
 
 logger = logging.getLogger(__name__)
 
+# Unread messages one run considers: at most UNREAD_BATCH_SIZE, and only
+# those from the last UNREAD_WINDOW_DAYS days - both apply together. The
+# count cap exists to stay well under Gemini's free-tier rate limit even
+# if the date window catches a burst of unread mail.
+# gmail.read.list_unread_message_ids's own defaults stay wider (no date
+# filter, higher count) for general-purpose use e.g. scripts/check_gmail.py.
+UNREAD_BATCH_SIZE = 5
+UNREAD_WINDOW_DAYS = 2
+
 
 def main() -> None:
     """Run one polling cycle against the real Gmail/Calendar/Gemini APIs."""
@@ -48,12 +58,22 @@ def run_cycle(gmail_service: Any, cal_service: Any, llm_client: Any) -> None:
     expire_stale_holds(cal_service)
     tz_name = get_calendar_timezone(cal_service)
     now = datetime.now(ZoneInfo(tz_name))
-    for message_id in list_unread_message_ids(gmail_service):
+    your_name = get_display_name(gmail_service)
+    for message_id in list_unread_message_ids(
+        gmail_service, max_results=UNREAD_BATCH_SIZE, newer_than_days=UNREAD_WINDOW_DAYS
+    ):
         try:
             message = get_message(gmail_service, message_id)
             body = get_message_body(gmail_service, message_id)
             process_message(
-                gmail_service, cal_service, llm_client, message, body, now, tz_name
+                gmail_service,
+                cal_service,
+                llm_client,
+                message,
+                body,
+                now,
+                tz_name,
+                your_name,
             )
         except Exception:
             logger.exception(
@@ -79,6 +99,7 @@ def process_message(
     body: str,
     now: datetime,
     tz_name: str,
+    your_name: str,
 ) -> None:
     """Classify one already-fetched email and act on it."""
     candidate_holds = list_holds(cal_service, thread_id=message.thread_id)
@@ -94,13 +115,27 @@ def process_message(
             classification.proposed_time,
             now,
             tz_name,
+            your_name,
         )
     elif classification.intent == "ask_availability":
-        _handle_ask_availability(gmail_service, cal_service, llm_client, message, now)
+        _handle_ask_availability(
+            gmail_service,
+            cal_service,
+            llm_client,
+            message,
+            now,
+            classification.earliest_offer_time,
+            your_name,
+        )
     elif classification.intent == "accept_slot":
         assert classification.matched_hold is not None
         _handle_accept_slot(
-            gmail_service, cal_service, llm_client, message, classification.matched_hold
+            gmail_service,
+            cal_service,
+            llm_client,
+            message,
+            classification.matched_hold,
+            your_name,
         )
     # "irrelevant" -> no draft, no calendar write.
 
@@ -113,6 +148,7 @@ def _handle_propose_time(
     proposed_time: datetime,
     now: datetime,
     tz_name: str,
+    your_name: str,
 ) -> None:
     end = proposed_time + SLOT_DURATION
     if proposed_time > now and is_slot_free(cal_service, proposed_time, end, tz_name):
@@ -123,9 +159,13 @@ def _handle_propose_time(
             end,
             _sender_email(message),
         )
-        reply_body = draft_booking_confirmation(llm_client, message, proposed_time, end)
+        reply_body = draft_booking_confirmation(
+            llm_client, message, proposed_time, end, your_name
+        )
     else:
-        reply_body = draft_time_unavailable(llm_client, message, proposed_time, end)
+        reply_body = draft_time_unavailable(
+            llm_client, message, proposed_time, end, your_name
+        )
     create_draft_reply(gmail_service, message, reply_body)
 
 
@@ -135,8 +175,10 @@ def _handle_ask_availability(
     llm_client: Any,
     message: Message,
     now: datetime,
+    earliest_offer_time: datetime | None,
+    your_name: str,
 ) -> None:
-    slots = find_open_slots(cal_service, now=now)
+    slots = find_open_slots(cal_service, now=now, earliest=earliest_offer_time)
     attendee_email = _sender_email(message)
     for slot in slots:
         create_hold(
@@ -147,15 +189,20 @@ def _handle_ask_availability(
             attendee_email,
             message.thread_id,
         )
-    reply_body = draft_slot_offer(llm_client, message, slots)
+    reply_body = draft_slot_offer(llm_client, message, slots, your_name)
     create_draft_reply(gmail_service, message, reply_body)
 
 
 def _handle_accept_slot(
-    gmail_service: Any, cal_service: Any, llm_client: Any, message: Message, hold: Hold
+    gmail_service: Any,
+    cal_service: Any,
+    llm_client: Any,
+    message: Message,
+    hold: Hold,
+    your_name: str,
 ) -> None:
     confirm_hold(cal_service, message.thread_id, hold.id)
-    reply_body = draft_slot_confirmed(llm_client, message, hold)
+    reply_body = draft_slot_confirmed(llm_client, message, hold, your_name)
     create_draft_reply(gmail_service, message, reply_body)
 
 

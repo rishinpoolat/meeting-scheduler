@@ -13,7 +13,11 @@ from gmail.read import Message
 
 Intent = Literal["propose_time", "ask_availability", "accept_slot", "irrelevant"]
 
-CLASSIFY_MAX_OUTPUT_TOKENS = 512
+# gemini-2.5-flash's "thinking" tokens otherwise share this same budget
+# (AUTOMATIC by default) before any JSON is emitted, which can silently
+# truncate the response on a more complex email; disabled below via
+# thinking_budget=0 since this extraction task doesn't need chain-of-thought.
+CLASSIFY_MAX_OUTPUT_TOKENS = 1024
 
 
 class ClassificationResult(BaseModel):
@@ -34,6 +38,18 @@ class ClassificationResult(BaseModel):
             "propose_time; null otherwise."
         )
     )
+    earliest_offer_time: str | None = Field(
+        description=(
+            "ISO 8601 datetime with UTC offset, computed relative to the "
+            "current date/time given below, representing the earliest "
+            "moment slots should be offered from. Set only when intent is "
+            "ask_availability AND the sender expressed a timeframe "
+            'preference (e.g. "next week", "not this week", "after '
+            'the 20th", "sometime next month"). Null when intent is '
+            "ask_availability with no stated timeframe preference (offer "
+            "starting now), and null for every other intent."
+        )
+    )
     accepted_slot_index: int | None = Field(
         description=(
             "1-based index into the numbered candidate slots list below. "
@@ -47,6 +63,7 @@ class Classification:
     intent: Intent
     proposed_time: datetime | None
     matched_hold: Hold | None
+    earliest_offer_time: datetime | None
 
 
 def classify_email(
@@ -76,14 +93,28 @@ def classify_email(
             response_mime_type="application/json",
             response_schema=ClassificationResult,
             max_output_tokens=CLASSIFY_MAX_OUTPUT_TOKENS,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
         ),
     )
 
     result = response.parsed
     if result is None:
-        raise ValueError("Gemini response did not contain a parsed classification")
+        raise ValueError(
+            "Gemini response did not contain a parsed classification "
+            f"(finish_reason={_finish_reason(response)})"
+        )
 
     return _to_classification(result, candidate_holds)
+
+
+def _finish_reason(response: Any) -> str:
+    """Best-effort diagnostic for a response that failed to parse - e.g.
+    MAX_TOKENS (output got cut off, raise CLASSIFY_MAX_OUTPUT_TOKENS) vs.
+    SAFETY (content filtered) point to very different fixes."""
+    candidates = getattr(response, "candidates", None) or []
+    if not candidates:
+        return "unknown"
+    return str(getattr(candidates[0], "finish_reason", "unknown"))
 
 
 def _build_prompt(
@@ -116,29 +147,54 @@ def _to_classification(
     intent = result.intent
 
     if intent == "propose_time":
-        proposed_time = _parse_proposed_time(result.proposed_time)
+        proposed_time = _parse_iso_datetime(result.proposed_time)
         if proposed_time is None:
             return Classification(
-                intent="irrelevant", proposed_time=None, matched_hold=None
+                intent="irrelevant",
+                proposed_time=None,
+                matched_hold=None,
+                earliest_offer_time=None,
             )
         return Classification(
-            intent="propose_time", proposed_time=proposed_time, matched_hold=None
+            intent="propose_time",
+            proposed_time=proposed_time,
+            matched_hold=None,
+            earliest_offer_time=None,
+        )
+
+    if intent == "ask_availability":
+        return Classification(
+            intent="ask_availability",
+            proposed_time=None,
+            matched_hold=None,
+            earliest_offer_time=_parse_iso_datetime(result.earliest_offer_time),
         )
 
     if intent == "accept_slot":
         matched_hold = _match_hold(result.accepted_slot_index, candidate_holds)
         if matched_hold is None:
             return Classification(
-                intent="irrelevant", proposed_time=None, matched_hold=None
+                intent="irrelevant",
+                proposed_time=None,
+                matched_hold=None,
+                earliest_offer_time=None,
             )
         return Classification(
-            intent="accept_slot", proposed_time=None, matched_hold=matched_hold
+            intent="accept_slot",
+            proposed_time=None,
+            matched_hold=matched_hold,
+            earliest_offer_time=None,
         )
 
-    return Classification(intent=intent, proposed_time=None, matched_hold=None)
+    return Classification(
+        intent=intent,
+        proposed_time=None,
+        matched_hold=None,
+        earliest_offer_time=None,
+    )
 
 
-def _parse_proposed_time(value: Any) -> datetime | None:
+def _parse_iso_datetime(value: Any) -> datetime | None:
     if not isinstance(value, str):
         return None
     try:

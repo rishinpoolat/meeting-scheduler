@@ -10,12 +10,19 @@
 1. **Auth** — one-time OAuth2 consent, refreshable token stored
    locally, covering both Gmail and Calendar scopes.
 2. **Poll** — list unread messages in the inbox (Gmail
-   `users.messages.list`, `maxResults=50`) each time `agent.py` is run
-   (a manually-invoked, single-pass script — no internal scheduling).
-   Only the 50 most recent unread are processed per run; anything
-   beyond that waits for the next run. No sender/address filtering —
-   deciding what's a real enquiry vs. spam/newsletters is the LLM's
-   job (step 3).
+   `users.messages.list`) each time `agent.py` is run (a
+   manually-invoked, single-pass script — no internal scheduling).
+   `agent.py` restricts this to unread messages from the last 2 days
+   (`UNREAD_WINDOW_DAYS`, via Gmail's `newer_than:Nd` search operator)
+   *and* caps it at 5 per run (`UNREAD_BATCH_SIZE`) — both apply
+   together, so a burst of unread mail within the window still can't
+   blow through Gemini's free-tier per-minute rate limit in one run;
+   anything beyond either limit waits for the next run.
+   `gmail.read.list_unread_message_ids`'s own defaults (no date
+   filter, 50 cap) remain wider for general-purpose callers like
+   `scripts/check_gmail.py`. No sender/address filtering — deciding
+   what's a real enquiry vs. spam/newsletters is the LLM's job
+   (step 3).
 3. **Classify** — hand the email text to Claude (tool use) to decide:
    proposes a specific time / asks for availability / neither (skip).
 4. **Check calendar** — Calendar `freebusy.query` (or `events.list`)

@@ -8,6 +8,9 @@ from gcalendar.events import Hold
 from gcalendar.slots import TimeSlot
 from gmail.read import Message
 from llm.draft import (
+    _format_date,
+    _format_range,
+    _format_time,
     _greeting_name,
     draft_booking_confirmation,
     draft_slot_confirmed,
@@ -28,13 +31,29 @@ MESSAGE = Message(
 START = datetime(2026, 7, 9, 9, 0, tzinfo=timezone.utc)
 END = datetime(2026, 7, 9, 9, 30, tzinfo=timezone.utc)
 HOLD = Hold(id="hold-1", thread_id="thread-1", start=START, end=END, created=START)
+YOUR_NAME = "Mohammed Rishin Poolat"
 
 DRAFT_CASES = [
-    (draft_booking_confirmation, (MESSAGE, START, END)),
-    (draft_time_unavailable, (MESSAGE, START, END)),
-    (draft_slot_offer, (MESSAGE, [TimeSlot(start=START, end=END)])),
-    (draft_slot_confirmed, (MESSAGE, HOLD)),
+    (draft_booking_confirmation, (MESSAGE, START, END, YOUR_NAME)),
+    (draft_time_unavailable, (MESSAGE, START, END, YOUR_NAME)),
+    (draft_slot_offer, (MESSAGE, [TimeSlot(start=START, end=END)], YOUR_NAME)),
+    (draft_slot_confirmed, (MESSAGE, HOLD, YOUR_NAME)),
 ]
+
+PLACEHOLDER_DRAFT_CASES = [
+    (draft_booking_confirmation, (MESSAGE, START, END, YOUR_NAME), "[[MEETING_TIME]]"),
+    (draft_time_unavailable, (MESSAGE, START, END, YOUR_NAME), "[[MEETING_TIME]]"),
+    (draft_slot_confirmed, (MESSAGE, HOLD, YOUR_NAME), "[[MEETING_TIME]]"),
+    (
+        draft_slot_offer,
+        (MESSAGE, [TimeSlot(start=START, end=END)], YOUR_NAME),
+        "[[SLOT_LIST]]",
+    ),
+]
+
+
+def _placeholder_for(draft_fn):
+    return "[[SLOT_LIST]]" if draft_fn is draft_slot_offer else "[[MEETING_TIME]]"
 
 
 def _client_with_text(text):
@@ -60,60 +79,178 @@ def _prompt(client):
     return kwargs["contents"]
 
 
-def test_draft_booking_confirmation_includes_start_end_in_prompt():
-    client = _client_with_text("Sounds great, see you then!")
+def test_format_time_strips_leading_zero_and_handles_noon_midnight():
+    cases = [
+        (0, "12:00 AM"),
+        (9, "9:00 AM"),
+        (12, "12:00 PM"),
+        (13, "1:00 PM"),
+        (23, "11:00 PM"),
+    ]
+    for hour, expected in cases:
+        dt = datetime(2026, 7, 9, hour, 0, tzinfo=timezone.utc)
+        assert _format_time(dt) == expected
 
-    result = draft_booking_confirmation(client, MESSAGE, START, END)
 
-    assert result == "Sounds great, see you then!"
+def test_format_date_has_no_leading_zero_on_day():
+    assert _format_date(datetime(2026, 7, 9, 9, 0, tzinfo=timezone.utc)) == (
+        "Thursday, July 9, 2026"
+    )
+
+
+def test_format_range_produces_unambiguous_12_hour_phrase():
+    # Pins the exact real-world case that was previously corrupted
+    # non-deterministically by Gemini's free-text reformatting.
+    start = datetime(2026, 7, 13, 13, 0, tzinfo=timezone.utc)
+    end = datetime(2026, 7, 13, 13, 30, tzinfo=timezone.utc)
+
+    assert _format_range(start, end) == "Monday, July 13, 2026 from 1:00 PM to 1:30 PM"
+
+
+def test_draft_booking_confirmation_replaces_placeholder_with_formatted_time():
+    client = _client_with_text("Sounds great, see you [[MEETING_TIME]]!")
+
+    result = draft_booking_confirmation(client, MESSAGE, START, END, YOUR_NAME)
+
+    assert result == (
+        "Sounds great, see you Thursday, July 9, 2026 from 9:00 AM to 9:30 AM!"
+    )
     prompt = _prompt(client)
-    assert "09:00" in prompt
-    assert "09:30" in prompt
+    assert "09:00" not in prompt
+    assert "9:00 AM" not in prompt
+    assert "[[MEETING_TIME]]" in prompt
 
 
-def test_draft_time_unavailable_includes_requested_time_in_prompt():
-    client = _client_with_text("Sorry, that time doesn't work.")
+def test_draft_time_unavailable_replaces_placeholder_with_formatted_time():
+    client = _client_with_text("Sorry, [[MEETING_TIME]] doesn't work.")
 
-    draft_time_unavailable(client, MESSAGE, START, END)
+    result = draft_time_unavailable(client, MESSAGE, START, END, YOUR_NAME)
 
+    assert result == (
+        "Sorry, Thursday, July 9, 2026 from 9:00 AM to 9:30 AM doesn't work."
+    )
     prompt = _prompt(client)
-    assert "09:00" in prompt
-    assert "09:30" in prompt
+    assert "09:00" not in prompt
+    assert "[[MEETING_TIME]]" in prompt
 
 
-def test_draft_slot_offer_includes_all_slots_in_prompt():
-    client = _client_with_text("Here are some times.")
+def test_draft_slot_confirmed_replaces_placeholder_with_formatted_time():
+    client = _client_with_text("Confirmed for [[MEETING_TIME]]!")
+
+    result = draft_slot_confirmed(client, MESSAGE, HOLD, YOUR_NAME)
+
+    assert result == "Confirmed for Thursday, July 9, 2026 from 9:00 AM to 9:30 AM!"
+    prompt = _prompt(client)
+    assert "09:00" not in prompt
+    assert "[[MEETING_TIME]]" in prompt
+
+
+def test_draft_slot_offer_replaces_placeholder_with_bulleted_slot_list():
+    client = _client_with_text("Here are some times:\n[[SLOT_LIST]]\nLet me know!")
     slots = [
         TimeSlot(start=START, end=END),
         TimeSlot(start=START.replace(hour=13), end=END.replace(hour=13, minute=30)),
     ]
 
-    draft_slot_offer(client, MESSAGE, slots)
+    result = draft_slot_offer(client, MESSAGE, slots, YOUR_NAME)
+
+    assert (
+        "- Thursday, July 9, 2026 from 9:00 AM to 9:30 AM\n"
+        "- Thursday, July 9, 2026 from 1:00 PM to 1:30 PM"
+    ) in result
+    prompt = _prompt(client)
+    assert "09:00" not in prompt
+    assert "13:00" not in prompt
+    assert "[[SLOT_LIST]]" in prompt
+
+
+def test_draft_slot_offer_with_no_slots_skips_placeholder_and_completes_directly():
+    client = _client_with_text("Sorry, nothing is open right now.")
+
+    result = draft_slot_offer(client, MESSAGE, [], YOUR_NAME)
+
+    assert result == "Sorry, nothing is open right now."
+    prompt = _prompt(client)
+    assert "[[SLOT_LIST]]" not in prompt
+    assert "no open times" in prompt.lower()
+
+
+@pytest.mark.parametrize("draft_fn, args, placeholder", PLACEHOLDER_DRAFT_CASES)
+def test_draft_functions_raise_value_error_when_placeholder_missing(
+    draft_fn, args, placeholder
+):
+    # Simulates the observed bug: Gemini writes a plausible-looking reply
+    # but never emits the placeholder (e.g. it wrote the time out itself
+    # instead of leaving the marker) - must fail loudly, not draft an
+    # unverified time.
+    client = _client_with_text("A friendly reply with no placeholder at all.")
+
+    with pytest.raises(ValueError):
+        draft_fn(client, *args)
+
+
+@pytest.mark.parametrize("draft_fn, args, placeholder", PLACEHOLDER_DRAFT_CASES)
+def test_draft_functions_raise_value_error_when_placeholder_duplicated(
+    draft_fn, args, placeholder
+):
+    # A duplicated placeholder is worse than a missing one if unguarded:
+    # str.replace(..., 1) would only fix the first occurrence, leaking a
+    # literal placeholder string into the drafted email. Must fail loudly
+    # instead of silently shipping a visibly broken draft.
+    client = _client_with_text(f"{placeholder} some text {placeholder}")
+
+    with pytest.raises(ValueError):
+        draft_fn(client, *args)
+
+
+@pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)
+def test_draft_functions_include_your_name_in_prompt(draft_fn, args):
+    client = _client_with_text(f"Reply text {_placeholder_for(draft_fn)}.")
+
+    draft_fn(client, *args)
 
     prompt = _prompt(client)
-    assert "09:00" in prompt
-    assert "13:00" in prompt
+    assert YOUR_NAME in prompt
 
 
-def test_draft_slot_confirmed_includes_hold_time_in_prompt():
-    client = _client_with_text("Confirmed!")
+@pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)
+def test_draft_functions_instruct_no_subject_line(draft_fn, args):
+    client = _client_with_text(f"Reply text {_placeholder_for(draft_fn)}.")
 
-    draft_slot_confirmed(client, MESSAGE, HOLD)
+    draft_fn(client, *args)
 
     prompt = _prompt(client)
-    assert "09:00" in prompt
-    assert "09:30" in prompt
+    assert "do not include a subject line" in prompt.lower()
+
+
+@pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)
+def test_draft_functions_strip_leading_subject_line_despite_instruction(draft_fn, args):
+    placeholder = _placeholder_for(draft_fn)
+    client = _client_with_text(
+        f"Subject: Re: Meeting Schedule\n\nHi there,\n\nBody {placeholder}."
+    )
+
+    result = draft_fn(client, *args)
+
+    assert result.startswith("Hi there,\n\nBody ")
+    assert placeholder not in result
 
 
 @pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)
 def test_draft_functions_use_correct_model_and_strip_response_text(draft_fn, args):
-    client = _client_with_text("  Reply text.  ")
+    placeholder = _placeholder_for(draft_fn)
+    client = _client_with_text(f"  Reply text {placeholder}.  ")
 
     result = draft_fn(client, *args)
 
-    assert result == "Reply text."
+    assert result.startswith("Reply text ")
+    assert placeholder not in result
     _, kwargs = client.models.generate_content.call_args
     assert kwargs["model"] == GEMINI_MODEL
+    # Locks in the thinking_budget=0 fix - draft.py has no response_schema
+    # to detect truncation via a parse failure, so a regression here could
+    # silently produce a truncated draft with no error raised.
+    assert kwargs["config"].thinking_config.thinking_budget == 0
 
 
 @pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)

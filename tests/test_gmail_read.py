@@ -45,6 +45,26 @@ def test_list_unread_message_ids_handles_empty_inbox():
     assert result == []
 
 
+def test_list_unread_message_ids_adds_newer_than_query_when_given():
+    service = _service_returning(list_response={"messages": [{"id": "a"}]})
+
+    result = list_unread_message_ids(service, max_results=5, newer_than_days=2)
+
+    assert result == ["a"]
+    service.users.return_value.messages.return_value.list.assert_called_once_with(
+        userId="me", labelIds=["INBOX", "UNREAD"], maxResults=5, q="newer_than:2d"
+    )
+
+
+def test_list_unread_message_ids_omits_query_when_newer_than_days_is_none():
+    service = _service_returning(list_response={"messages": []})
+
+    list_unread_message_ids(service, max_results=50, newer_than_days=None)
+
+    call_kwargs = service.users.return_value.messages.return_value.list.call_args.kwargs
+    assert "q" not in call_kwargs
+
+
 def test_mark_as_read_removes_unread_label():
     service = MagicMock()
 
