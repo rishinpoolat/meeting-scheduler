@@ -117,6 +117,25 @@ def test_draft_functions_include_your_name_in_prompt(draft_fn, args):
 
 
 @pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)
+def test_draft_functions_instruct_no_subject_line(draft_fn, args):
+    client = _client_with_text("Reply text.")
+
+    draft_fn(client, *args)
+
+    prompt = _prompt(client)
+    assert "do not include a subject line" in prompt.lower()
+
+
+@pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)
+def test_draft_functions_strip_leading_subject_line_despite_instruction(draft_fn, args):
+    client = _client_with_text("Subject: Re: Meeting Schedule\n\nHi there,\n\nBody.")
+
+    result = draft_fn(client, *args)
+
+    assert result == "Hi there,\n\nBody."
+
+
+@pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)
 def test_draft_functions_use_correct_model_and_strip_response_text(draft_fn, args):
     client = _client_with_text("  Reply text.  ")
 

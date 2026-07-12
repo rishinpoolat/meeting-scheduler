@@ -13,6 +13,11 @@ from gmail.read import Message
 
 DRAFT_MAX_OUTPUT_TOKENS = 1024
 
+# Belt-and-suspenders fallback for _intro()'s "no subject line" prompt
+# instruction, which isn't a 100% reliable guarantee against Gemini
+# output habits.
+_LEADING_SUBJECT_LINE = re.compile(r"^subject:.*(\n|$)", re.IGNORECASE)
+
 
 def draft_booking_confirmation(
     client: Any, message: Message, start: datetime, end: datetime, your_name: str
@@ -74,7 +79,9 @@ def _intro(message: Message, your_name: str) -> str:
     name = _greeting_name(message.from_address)
     return (
         f"You are {your_name}, replying to {name} about: {message.subject}. "
-        f"Sign the email as {your_name}."
+        f"Sign the email as {your_name}. Write only the email body text - do "
+        'not include a subject line or a "Subject:" prefix, since the '
+        "subject is set separately."
     )
 
 
@@ -99,4 +106,5 @@ def _complete(client: Any, prompt: str) -> str:
     )
     if not response.text:
         raise ValueError("Gemini response contained no text")
-    return str(response.text).strip()
+    text = str(response.text).strip()
+    return _LEADING_SUBJECT_LINE.sub("", text, count=1).strip()
