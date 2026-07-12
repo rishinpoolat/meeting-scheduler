@@ -102,7 +102,15 @@ def _complete(client: Any, prompt: str) -> str:
     response = client.models.generate_content(
         model=GEMINI_MODEL,
         contents=prompt,
-        config=types.GenerateContentConfig(max_output_tokens=DRAFT_MAX_OUTPUT_TOKENS),
+        config=types.GenerateContentConfig(
+            max_output_tokens=DRAFT_MAX_OUTPUT_TOKENS,
+            # Same fix as llm/classify.py: without this, gemini-2.5-flash's
+            # internal "thinking" tokens share this budget and could silently
+            # truncate the reply text (no response_schema here to detect it
+            # via a parse failure - a truncated draft would otherwise slip
+            # through as a non-empty response.text with no error raised).
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+        ),
     )
     if not response.text:
         raise ValueError("Gemini response contained no text")

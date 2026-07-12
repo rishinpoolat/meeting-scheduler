@@ -36,9 +36,12 @@ def _client_with_result(**overrides):
     return client
 
 
-def _client_with_no_parsed_result():
+def _client_with_no_parsed_result(finish_reason="SAFETY"):
+    candidate = MagicMock()
+    candidate.finish_reason = finish_reason
     response = MagicMock()
     response.parsed = None
+    response.candidates = [candidate]
     client = MagicMock()
     client.models.generate_content.return_value = response
     return client
@@ -271,6 +274,24 @@ def test_classify_email_raises_value_error_when_no_parsed_result_returned():
         classify_email(client, MESSAGE, "body", NOW, [])
 
 
+def test_classify_email_error_includes_finish_reason_for_diagnosis():
+    client = _client_with_no_parsed_result(finish_reason="MAX_TOKENS")
+
+    with pytest.raises(ValueError, match="MAX_TOKENS"):
+        classify_email(client, MESSAGE, "body", NOW, [])
+
+
+def test_classify_email_error_handles_missing_candidates_gracefully():
+    response = MagicMock()
+    response.parsed = None
+    response.candidates = []
+    client = MagicMock()
+    client.models.generate_content.return_value = response
+
+    with pytest.raises(ValueError, match="unknown"):
+        classify_email(client, MESSAGE, "body", NOW, [])
+
+
 def test_classify_email_raises_value_error_for_naive_now():
     client = _client_with_result(
         intent="irrelevant", proposed_time=None, accepted_slot_index=None
@@ -321,3 +342,6 @@ def test_classify_email_uses_correct_model_and_response_schema():
     assert kwargs["model"] == GEMINI_MODEL
     assert kwargs["config"].response_mime_type == "application/json"
     assert kwargs["config"].response_schema is ClassificationResult
+    # Locks in the thinking_budget=0 fix - a regression here would silently
+    # reintroduce the real MAX_TOKENS truncation failure this guards against.
+    assert kwargs["config"].thinking_config.thinking_budget == 0

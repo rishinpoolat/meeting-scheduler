@@ -13,7 +13,11 @@ from gmail.read import Message
 
 Intent = Literal["propose_time", "ask_availability", "accept_slot", "irrelevant"]
 
-CLASSIFY_MAX_OUTPUT_TOKENS = 512
+# gemini-2.5-flash's "thinking" tokens otherwise share this same budget
+# (AUTOMATIC by default) before any JSON is emitted, which can silently
+# truncate the response on a more complex email; disabled below via
+# thinking_budget=0 since this extraction task doesn't need chain-of-thought.
+CLASSIFY_MAX_OUTPUT_TOKENS = 1024
 
 
 class ClassificationResult(BaseModel):
@@ -89,14 +93,28 @@ def classify_email(
             response_mime_type="application/json",
             response_schema=ClassificationResult,
             max_output_tokens=CLASSIFY_MAX_OUTPUT_TOKENS,
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
         ),
     )
 
     result = response.parsed
     if result is None:
-        raise ValueError("Gemini response did not contain a parsed classification")
+        raise ValueError(
+            "Gemini response did not contain a parsed classification "
+            f"(finish_reason={_finish_reason(response)})"
+        )
 
     return _to_classification(result, candidate_holds)
+
+
+def _finish_reason(response: Any) -> str:
+    """Best-effort diagnostic for a response that failed to parse - e.g.
+    MAX_TOKENS (output got cut off, raise CLASSIFY_MAX_OUTPUT_TOKENS) vs.
+    SAFETY (content filtered) point to very different fixes."""
+    candidates = getattr(response, "candidates", None) or []
+    if not candidates:
+        return "unknown"
+    return str(getattr(candidates[0], "finish_reason", "unknown"))
 
 
 def _build_prompt(
