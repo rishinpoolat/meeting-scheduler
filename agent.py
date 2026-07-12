@@ -119,7 +119,13 @@ def process_message(
         )
     elif classification.intent == "ask_availability":
         _handle_ask_availability(
-            gmail_service, cal_service, llm_client, message, now, your_name
+            gmail_service,
+            cal_service,
+            llm_client,
+            message,
+            now,
+            classification.earliest_offer_time,
+            your_name,
         )
     elif classification.intent == "accept_slot":
         assert classification.matched_hold is not None
@@ -169,9 +175,10 @@ def _handle_ask_availability(
     llm_client: Any,
     message: Message,
     now: datetime,
+    earliest_offer_time: datetime | None,
     your_name: str,
 ) -> None:
-    slots = find_open_slots(cal_service, now=now)
+    slots = find_open_slots(cal_service, now=now, earliest=earliest_offer_time)
     attendee_email = _sender_email(message)
     for slot in slots:
         create_hold(

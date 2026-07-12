@@ -44,6 +44,7 @@ def _classification(**overrides: object) -> Classification:
         "intent": "irrelevant",
         "proposed_time": None,
         "matched_hold": None,
+        "earliest_offer_time": None,
     }
     fields.update(overrides)
     return Classification(**fields)  # type: ignore[arg-type]
@@ -302,7 +303,7 @@ class TestProcessMessage:
                 YOUR_NAME,
             )
 
-        mock_find_slots.assert_called_once_with(cal_service, now=NOW)
+        mock_find_slots.assert_called_once_with(cal_service, now=NOW, earliest=None)
         assert mock_create_hold.call_count == 2
         for call, slot in zip(mock_create_hold.call_args_list, slots):
             assert call.args == (
@@ -317,6 +318,37 @@ class TestProcessMessage:
         mock_draft_reply.assert_called_once_with(
             gmail_service, MESSAGE, "here are some times"
         )
+
+    def test_ask_availability_threads_earliest_offer_time_into_find_open_slots(
+        self,
+    ) -> None:
+        gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
+        earliest = datetime(2026, 7, 20, 9, 0, tzinfo=timezone.utc)
+        with (
+            patch("agent.list_holds", return_value=[]),
+            patch(
+                "agent.classify_email",
+                return_value=_classification(
+                    intent="ask_availability", earliest_offer_time=earliest
+                ),
+            ),
+            patch("agent.find_open_slots", return_value=[]) as mock_find_slots,
+            patch("agent.create_hold"),
+            patch("agent.draft_slot_offer", return_value="here are some times"),
+            patch("agent.create_draft_reply"),
+        ):
+            process_message(
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
+            )
+
+        mock_find_slots.assert_called_once_with(cal_service, now=NOW, earliest=earliest)
 
     def test_ask_availability_with_no_open_slots_creates_no_holds_but_still_drafts(
         self,

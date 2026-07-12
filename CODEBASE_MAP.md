@@ -35,15 +35,19 @@ classifying — this is what wires thread-hold-acceptance matching into
 `llm.classify.classify_email()` — then dispatches on
 `Classification.intent`: `propose_time` books if free (else drafts
 "unavailable"), `ask_availability` creates one tentative hold per
-offered slot, `accept_slot` confirms the matched hold, `irrelevant` is
+offered slot (threading `classification.earliest_offer_time` into
+`find_open_slots()` so a stated timeframe preference like "next week"
+is respected instead of always offering starting today), `accept_slot`
+confirms the matched hold, `irrelevant` is
 a no-op (but still gets marked read, so spam isn't reclassified by
 Gemini on every re-run). `classify_email()` returns only a proposed
 *start* time for `propose_time`, so `agent.py` reuses
 `gcalendar.slots.SLOT_DURATION` (30 min) as the assumed meeting length
 for both the free/busy check and the booking. See
 `specs/2026-07-09-agent-orchestration/spec.md`,
-`specs/2026-07-09-polling-loop/spec.md`, and
-`specs/2026-07-12-draft-signature-name/spec.md` for the full decision
+`specs/2026-07-09-polling-loop/spec.md`,
+`specs/2026-07-12-draft-signature-name/spec.md`, and
+`specs/2026-07-12-earliest-offer-time/spec.md` for the full decision
 log.
 
 ## auth/
@@ -85,7 +89,11 @@ checks/queries free-busy; `slots.py` finds up to 5 open 30-minute
 slots across the next 5 business days (9am-5pm), at most one per
 half-day (morning 9-1, afternoon 1-5) so offered times spread out
 instead of clustering, from a single `freebusy.query` call (`TimeSlot`
-dataclass); `events.py` books
+dataclass); `find_open_slots()` takes an optional `earliest` that
+pushes the starting point later than `now` (never earlier — clamped
+via `max(current, earliest)`), fed from `llm.classify`'s
+`earliest_offer_time` when the sender stated a timeframe preference;
+`events.py` books
 confirmed events, creates tentative holds tagged with a Gmail thread
 ID via `extendedProperties.private` (`scheduler_hold`/
 `scheduler_thread_id`), confirms a hold while deleting its siblings,
@@ -107,7 +115,15 @@ irrelevant) and extract a proposed datetime or matched `Hold` — a
 malformed-but-well-formed response (bad index, unparseable/naive time)
 downgrades to `irrelevant` rather than raising, while `response.parsed
 is None` (Gemini couldn't produce schema-conforming output) raises (see
-spec for the raise-vs-downgrade rule); `draft.py` has four
+spec for the raise-vs-downgrade rule). `ask_availability` also carries
+an optional `earliest_offer_time` (Gemini's relative-date reasoning
+applied to timeframe phrases like "next week") that
+`gcalendar.slots.find_open_slots()` uses to push where it starts
+offering slots from — but a malformed value here falls back to `None`
+instead of downgrading the whole classification, deliberately unlike
+`proposed_time`/`accepted_slot_index`, since it's an optional
+refinement and `ask_availability` stays fully actionable without it
+(see `specs/2026-07-12-earliest-offer-time/spec.md`); `draft.py` has four
 outcome-specific functions (not one polymorphic type) that draft reply
 text via plain Gemini completions, one per calendar outcome, each
 taking a `your_name: str` (the account's display name, fetched once
@@ -152,4 +168,7 @@ account's real display name so drafted replies sign off with it
 instead of a placeholder; `llm/draft.py`'s four functions and
 `agent.py`'s threading updated accordingly; `agent.py` also now caps
 each run's unread messages by both count and a 2-day window to avoid
-re-hitting Gemini's free-tier rate limit)
+re-hitting Gemini's free-tier rate limit; `llm.classify` now extracts
+an optional `earliest_offer_time` for `ask_availability` so
+`gcalendar.slots.find_open_slots()` respects a sender-stated timeframe
+preference instead of always starting from `now`)

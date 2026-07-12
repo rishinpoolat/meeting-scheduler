@@ -34,6 +34,18 @@ class ClassificationResult(BaseModel):
             "propose_time; null otherwise."
         )
     )
+    earliest_offer_time: str | None = Field(
+        description=(
+            "ISO 8601 datetime with UTC offset, computed relative to the "
+            "current date/time given below, representing the earliest "
+            "moment slots should be offered from. Set only when intent is "
+            "ask_availability AND the sender expressed a timeframe "
+            'preference (e.g. "next week", "not this week", "after '
+            'the 20th", "sometime next month"). Null when intent is '
+            "ask_availability with no stated timeframe preference (offer "
+            "starting now), and null for every other intent."
+        )
+    )
     accepted_slot_index: int | None = Field(
         description=(
             "1-based index into the numbered candidate slots list below. "
@@ -47,6 +59,7 @@ class Classification:
     intent: Intent
     proposed_time: datetime | None
     matched_hold: Hold | None
+    earliest_offer_time: datetime | None
 
 
 def classify_email(
@@ -116,29 +129,54 @@ def _to_classification(
     intent = result.intent
 
     if intent == "propose_time":
-        proposed_time = _parse_proposed_time(result.proposed_time)
+        proposed_time = _parse_iso_datetime(result.proposed_time)
         if proposed_time is None:
             return Classification(
-                intent="irrelevant", proposed_time=None, matched_hold=None
+                intent="irrelevant",
+                proposed_time=None,
+                matched_hold=None,
+                earliest_offer_time=None,
             )
         return Classification(
-            intent="propose_time", proposed_time=proposed_time, matched_hold=None
+            intent="propose_time",
+            proposed_time=proposed_time,
+            matched_hold=None,
+            earliest_offer_time=None,
+        )
+
+    if intent == "ask_availability":
+        return Classification(
+            intent="ask_availability",
+            proposed_time=None,
+            matched_hold=None,
+            earliest_offer_time=_parse_iso_datetime(result.earliest_offer_time),
         )
 
     if intent == "accept_slot":
         matched_hold = _match_hold(result.accepted_slot_index, candidate_holds)
         if matched_hold is None:
             return Classification(
-                intent="irrelevant", proposed_time=None, matched_hold=None
+                intent="irrelevant",
+                proposed_time=None,
+                matched_hold=None,
+                earliest_offer_time=None,
             )
         return Classification(
-            intent="accept_slot", proposed_time=None, matched_hold=matched_hold
+            intent="accept_slot",
+            proposed_time=None,
+            matched_hold=matched_hold,
+            earliest_offer_time=None,
         )
 
-    return Classification(intent=intent, proposed_time=None, matched_hold=None)
+    return Classification(
+        intent=intent,
+        proposed_time=None,
+        matched_hold=None,
+        earliest_offer_time=None,
+    )
 
 
-def _parse_proposed_time(value: Any) -> datetime | None:
+def _parse_iso_datetime(value: Any) -> datetime | None:
     if not isinstance(value, str):
         return None
     try:

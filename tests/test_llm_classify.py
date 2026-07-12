@@ -21,7 +21,14 @@ MESSAGE = Message(
 NOW = datetime(2026, 7, 7, 9, 0, tzinfo=timezone.utc)
 
 
-def _client_with_result(**fields):
+def _client_with_result(**overrides):
+    fields = {
+        "intent": "irrelevant",
+        "proposed_time": None,
+        "earliest_offer_time": None,
+        "accepted_slot_index": None,
+    }
+    fields.update(overrides)
     response = MagicMock()
     response.parsed = ClassificationResult(**fields)
     client = MagicMock()
@@ -49,6 +56,7 @@ def test_classify_email_propose_time_parses_datetime():
         intent="propose_time",
         proposed_time=datetime.fromisoformat(proposed),
         matched_hold=None,
+        earliest_offer_time=None,
     )
 
 
@@ -65,19 +73,117 @@ def test_classify_email_propose_time_parses_z_suffixed_datetime():
         intent="propose_time",
         proposed_time=datetime.fromisoformat("2026-07-09T14:00:00+00:00"),
         matched_hold=None,
+        earliest_offer_time=None,
     )
 
 
 def test_classify_email_ask_availability():
-    client = _client_with_result(
-        intent="ask_availability", proposed_time=None, accepted_slot_index=None
-    )
+    client = _client_with_result(intent="ask_availability")
 
     result = classify_email(client, MESSAGE, "When are you free?", NOW, [])
 
     assert result == Classification(
-        intent="ask_availability", proposed_time=None, matched_hold=None
+        intent="ask_availability",
+        proposed_time=None,
+        matched_hold=None,
+        earliest_offer_time=None,
     )
+
+
+def test_classify_email_ask_availability_parses_earliest_offer_time():
+    earliest = "2026-07-13T00:00:00+00:00"
+    client = _client_with_result(
+        intent="ask_availability", earliest_offer_time=earliest
+    )
+
+    result = classify_email(client, MESSAGE, "Maybe next week?", NOW, [])
+
+    assert result == Classification(
+        intent="ask_availability",
+        proposed_time=None,
+        matched_hold=None,
+        earliest_offer_time=datetime.fromisoformat(earliest),
+    )
+
+
+def test_classify_email_ask_availability_parses_z_suffixed_earliest_offer_time():
+    client = _client_with_result(
+        intent="ask_availability", earliest_offer_time="2026-07-13T00:00:00Z"
+    )
+
+    result = classify_email(client, MESSAGE, "Maybe next week?", NOW, [])
+
+    assert result.earliest_offer_time == datetime.fromisoformat(
+        "2026-07-13T00:00:00+00:00"
+    )
+
+
+def test_classify_email_ask_availability_falls_back_to_none_on_unparseable_earliest():
+    client = _client_with_result(
+        intent="ask_availability", earliest_offer_time="not-a-date"
+    )
+
+    result = classify_email(client, MESSAGE, "Maybe next week?", NOW, [])
+
+    # Unlike proposed_time, a malformed earliest_offer_time does NOT
+    # downgrade the whole classification - it's an optional refinement,
+    # not required for ask_availability to be actionable.
+    assert result == Classification(
+        intent="ask_availability",
+        proposed_time=None,
+        matched_hold=None,
+        earliest_offer_time=None,
+    )
+
+
+def test_classify_email_ask_availability_falls_back_to_none_on_naive_earliest():
+    client = _client_with_result(
+        intent="ask_availability", earliest_offer_time="2026-07-13T00:00:00"
+    )
+
+    result = classify_email(client, MESSAGE, "Maybe next week?", NOW, [])
+
+    assert result == Classification(
+        intent="ask_availability",
+        proposed_time=None,
+        matched_hold=None,
+        earliest_offer_time=None,
+    )
+
+
+def test_classify_email_earliest_offer_time_ignored_for_propose_time_intent():
+    client = _client_with_result(
+        intent="propose_time",
+        proposed_time="2026-07-09T14:00:00+00:00",
+        earliest_offer_time="2026-07-13T00:00:00+00:00",
+    )
+
+    result = classify_email(client, MESSAGE, "Let's meet Thursday at 2pm", NOW, [])
+
+    assert result.earliest_offer_time is None
+
+
+def test_classify_email_earliest_offer_time_ignored_for_accept_slot_intent():
+    holds = [Hold(id="hold-1", thread_id="thread-1", start=NOW, end=NOW, created=NOW)]
+    client = _client_with_result(
+        intent="accept_slot",
+        accepted_slot_index=1,
+        earliest_offer_time="2026-07-13T00:00:00+00:00",
+    )
+
+    result = classify_email(client, MESSAGE, "Sounds good", NOW, holds)
+
+    assert result.earliest_offer_time is None
+
+
+def test_classify_email_earliest_offer_time_ignored_for_irrelevant_intent():
+    client = _client_with_result(
+        intent="irrelevant", earliest_offer_time="2026-07-13T00:00:00+00:00"
+    )
+
+    result = classify_email(client, MESSAGE, "50% off everything!", NOW, [])
+
+    assert result.earliest_offer_time is None
 
 
 def test_classify_email_accept_slot_maps_index_to_hold():
@@ -103,7 +209,10 @@ def test_classify_email_irrelevant():
     result = classify_email(client, MESSAGE, "50% off everything!", NOW, [])
 
     assert result == Classification(
-        intent="irrelevant", proposed_time=None, matched_hold=None
+        intent="irrelevant",
+        proposed_time=None,
+        matched_hold=None,
+        earliest_offer_time=None,
     )
 
 
@@ -116,7 +225,10 @@ def test_classify_email_downgrades_out_of_range_slot_index_to_irrelevant():
     result = classify_email(client, MESSAGE, "Sounds good", NOW, holds)
 
     assert result == Classification(
-        intent="irrelevant", proposed_time=None, matched_hold=None
+        intent="irrelevant",
+        proposed_time=None,
+        matched_hold=None,
+        earliest_offer_time=None,
     )
 
 
@@ -128,7 +240,10 @@ def test_classify_email_downgrades_unparseable_proposed_time_to_irrelevant():
     result = classify_email(client, MESSAGE, "Let's meet soon", NOW, [])
 
     assert result == Classification(
-        intent="irrelevant", proposed_time=None, matched_hold=None
+        intent="irrelevant",
+        proposed_time=None,
+        matched_hold=None,
+        earliest_offer_time=None,
     )
 
 
@@ -142,7 +257,10 @@ def test_classify_email_downgrades_naive_proposed_time_to_irrelevant():
     result = classify_email(client, MESSAGE, "Let's meet Thursday at 2pm", NOW, [])
 
     assert result == Classification(
-        intent="irrelevant", proposed_time=None, matched_hold=None
+        intent="irrelevant",
+        proposed_time=None,
+        matched_hold=None,
+        earliest_offer_time=None,
     )
 
 

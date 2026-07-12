@@ -160,3 +160,80 @@ def test_now_exactly_at_5pm_excludes_today():
     slots = find_open_slots(service, count=1, now=_dt(TUE, 17, 0))
 
     assert slots == [_slot(WED, 9, 0)]
+
+
+def test_earliest_after_now_pushes_start_later():
+    service = _service()
+
+    slots = find_open_slots(
+        service, count=2, now=_dt(MON, 8, 0), earliest=_dt(WED, 0, 0)
+    )
+
+    assert slots == [_slot(WED, 9, 0), _slot(WED, 13, 0)]
+
+
+def test_earliest_before_now_is_clamped_to_now():
+    service = _service()
+
+    slots = find_open_slots(
+        service, count=1, now=_dt(TUE, 11, 47), earliest=_dt(MON, 8, 0)
+    )
+
+    assert slots == [_slot(TUE, 12, 0)]
+
+
+def test_earliest_mid_day_applies_same_rounding_as_now():
+    service = _service()
+
+    slots = find_open_slots(
+        service, count=1, now=_dt(MON, 8, 0), earliest=_dt(TUE, 14, 17)
+    )
+
+    assert slots == [_slot(TUE, 14, 30)]
+
+
+def test_earliest_on_weekend_rolls_to_next_business_day_morning():
+    service = _service()
+
+    slots = find_open_slots(
+        service, count=1, now=_dt(FRI, 8, 0), earliest=_dt(SAT, 10, 0)
+    )
+
+    assert slots == [_slot(8, 9, 0)]
+
+
+def test_earliest_far_in_future_still_returns_full_count():
+    service = _service()
+    earliest = datetime(2024, 2, 1, 8, 0, tzinfo=timezone.utc)  # a Thursday
+
+    slots = find_open_slots(service, count=5, now=_dt(MON, 8, 0), earliest=earliest)
+
+    assert len(slots) == 5
+    assert all(slot.start >= earliest for slot in slots)
+    assert slots[0] == TimeSlot(
+        start=datetime(2024, 2, 1, 9, 0, tzinfo=timezone.utc),
+        end=datetime(2024, 2, 1, 9, 30, tzinfo=timezone.utc),
+    )
+
+
+def test_naive_earliest_raises_instead_of_silently_using_local_timezone():
+    service = _service()
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        find_open_slots(
+            service, count=1, now=_dt(MON, 8, 0), earliest=datetime(2024, 1, 3, 0, 0)
+        )
+
+
+def test_earliest_defaults_to_none_preserves_existing_behavior():
+    service = _service()
+
+    slots = find_open_slots(service, count=5, now=_dt(MON, 8, 0))
+
+    assert slots == [
+        _slot(MON, 9, 0),
+        _slot(MON, 13, 0),
+        _slot(TUE, 9, 0),
+        _slot(TUE, 13, 0),
+        _slot(WED, 9, 0),
+    ]

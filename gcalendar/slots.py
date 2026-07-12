@@ -22,17 +22,29 @@ class TimeSlot:
 
 
 def find_open_slots(
-    service: Any, count: int = 5, now: datetime | None = None
+    service: Any,
+    count: int = 5,
+    now: datetime | None = None,
+    earliest: datetime | None = None,
 ) -> list[TimeSlot]:
     """Return up to `count` free 30-min slots, at most one per half-day
-    (morning, afternoon), across the next 5 business days, 9am-5pm."""
+    (morning, afternoon), across the next 5 business days, 9am-5pm.
+
+    `earliest`, if given, pushes the starting point later than `now`
+    when it's further in the future - it never pulls the start earlier
+    than `now` itself.
+    """
     if now is not None and now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
+    if earliest is not None and earliest.tzinfo is None:
+        raise ValueError("earliest must be timezone-aware")
     if count <= 0:
         return []
     tz_name = get_calendar_timezone(service)
     tz = ZoneInfo(tz_name)
     current = (now or datetime.now(tz)).astimezone(tz)
+    if earliest is not None:
+        current = max(current, earliest.astimezone(tz))
 
     windows = _half_day_windows(current, tz)
     if not windows:
