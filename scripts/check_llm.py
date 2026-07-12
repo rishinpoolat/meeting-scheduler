@@ -30,6 +30,10 @@ SLEEP_SECONDS = 15
 TZ = ZoneInfo("America/New_York")
 NOW = datetime(2026, 7, 7, 9, 0, tzinfo=TZ)  # a Tuesday
 
+# llm/ is pure (no Gmail API calls), so this stands in for the real
+# gmail.profile.get_display_name() value agent.py fetches at runtime.
+YOUR_NAME = "Mohammed Rishin Poolat"
+
 MESSAGE = Message(
     id="check-llm-manual-test",
     thread_id="check-llm-manual-test-thread",
@@ -78,11 +82,11 @@ def main() -> None:
     time.sleep(SLEEP_SECONDS)
 
     print("  draft_booking_confirmation ->")
-    print(draft_booking_confirmation(client, MESSAGE, start, end))
+    print(draft_booking_confirmation(client, MESSAGE, start, end, YOUR_NAME))
     time.sleep(SLEEP_SECONDS)
 
     print("  draft_time_unavailable ->")
-    print(draft_time_unavailable(client, MESSAGE, start, end))
+    print(draft_time_unavailable(client, MESSAGE, start, end, YOUR_NAME))
     time.sleep(SLEEP_SECONDS)
 
     print("\n[ask_availability]")
@@ -98,7 +102,7 @@ def main() -> None:
 
     print("  draft_slot_offer ->")
     slots = [TimeSlot(start=hold.start, end=hold.end) for hold in CANDIDATE_HOLDS]
-    print(draft_slot_offer(client, MESSAGE, slots))
+    print(draft_slot_offer(client, MESSAGE, slots, YOUR_NAME))
     time.sleep(SLEEP_SECONDS)
 
     print("\n[irrelevant]")
@@ -125,7 +129,7 @@ def main() -> None:
 
     if result.matched_hold is not None:
         print("  draft_slot_confirmed ->")
-        print(draft_slot_confirmed(client, MESSAGE, result.matched_hold))
+        print(draft_slot_confirmed(client, MESSAGE, result.matched_hold, YOUR_NAME))
 
 
 if __name__ == "__main__":

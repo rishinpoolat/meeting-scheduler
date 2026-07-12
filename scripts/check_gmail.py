@@ -8,6 +8,7 @@ correctly in Gmail's UI. Real reply content comes later (Feature 4).
 
 from gmail.client import get_service
 from gmail.draft import create_draft_reply
+from gmail.profile import get_display_name
 from gmail.read import get_message, list_unread_message_ids
 
 PLACEHOLDER_BODY = (
@@ -19,6 +20,8 @@ PLACEHOLDER_BODY = (
 
 def main() -> None:
     service = get_service()
+
+    print(f"Account display name: {get_display_name(service)}")
 
     message_ids = list_unread_message_ids(service)
     print(f"{len(message_ids)} unread message(s):")

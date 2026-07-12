@@ -16,8 +16,10 @@ Entry point (`python agent.py` / `main()`) — a manually-run, **single
 pass**, by design: no internal scheduling loop or polling interval
 (considered and explicitly rejected). `run_cycle()` sweeps stale holds
 (`gcalendar.events.expire_stale_holds()`) first, then fetches this
-run's `now`/timezone once (`get_calendar_timezone()` +
-`datetime.now(ZoneInfo(...))`), lists unread messages, and for each
+run's `now`/timezone (`get_calendar_timezone()` +
+`datetime.now(ZoneInfo(...))`) and the account's display name
+(`gmail.profile.get_display_name()`, used to sign drafted replies)
+once each, lists unread messages, and for each
 one wraps fetch + `process_message()` + `gmail.read.mark_as_read()` in
 a single try/except — a failure anywhere in that sequence is logged
 (via `logging.getLogger(__name__)`, first use of `logging` in this
@@ -35,15 +37,21 @@ Gemini on every re-run). `classify_email()` returns only a proposed
 *start* time for `propose_time`, so `agent.py` reuses
 `gcalendar.slots.SLOT_DURATION` (30 min) as the assumed meeting length
 for both the free/busy check and the booking. See
-`specs/2026-07-09-agent-orchestration/spec.md` and
-`specs/2026-07-09-polling-loop/spec.md` for the full decision log.
+`specs/2026-07-09-agent-orchestration/spec.md`,
+`specs/2026-07-09-polling-loop/spec.md`, and
+`specs/2026-07-12-draft-signature-name/spec.md` for the full decision
+log.
 
 ## auth/
 
 OAuth2 flow (`google-auth-oauthlib`) and token storage/refresh for the
-combined Gmail + Calendar scopes. `google_auth.py` exposes
-`get_credentials()` — always import this rather than touching
-`credentials.json`/`token.json` directly.
+combined Gmail + Calendar scopes (`gmail.modify`, `gmail.compose`,
+`gmail.settings.basic`, `calendar.events`, `calendar.freebusy`).
+`google_auth.py` exposes `get_credentials()` — always import this
+rather than touching `credentials.json`/`token.json` directly. Adding
+a scope means any existing `token.json` was authorized under the old
+set and must be regenerated (delete it, then the next run's
+`_run_interactive_flow()` re-prompts for consent).
 
 ## gmail/
 
@@ -53,7 +61,12 @@ fetches header metadata (`Message` dataclass) and body text, and marks
 a message read via `mark_as_read()` (removes the `UNREAD` label, used
 by `agent.py` once a message is successfully processed so re-running
 `agent.py` doesn't reprocess it); `draft.py` creates threaded draft
-replies (`In-Reply-To`/`References`/`threadId`). No sender/relevance
+replies (`In-Reply-To`/`References`/`threadId`); `profile.py`'s
+`get_display_name()` reads the account's own configured "send mail
+as" name (`users.settings.sendAs.list`, the `isPrimary` entry — needs
+the `gmail.settings.basic` scope), used by `agent.py` to sign drafted
+replies instead of a placeholder, falling back to the local part of
+the email address if no display name is set. No sender/relevance
 filtering here by design — that's `llm/`'s job.
 
 ## gcalendar/
@@ -92,9 +105,13 @@ downgrades to `irrelevant` rather than raising, while `response.parsed
 is None` (Gemini couldn't produce schema-conforming output) raises (see
 spec for the raise-vs-downgrade rule); `draft.py` has four
 outcome-specific functions (not one polymorphic type) that draft reply
-text via plain Gemini completions, one per calendar outcome. Pure
-module — no Gmail/Calendar API calls happen here; the orchestrator
-(`agent.py`) wires `llm/` together with `gmail/`/`gcalendar/`.
+text via plain Gemini completions, one per calendar outcome, each
+taking a `your_name: str` (the account's display name, fetched once
+per run by `agent.py` via `gmail.profile.get_display_name()`) so the
+prompt tells Gemini who to sign the reply as instead of leaving it a
+placeholder. Pure module — no Gmail/Calendar API calls happen here;
+the orchestrator (`agent.py`) wires `llm/` together with
+`gmail/`/`gcalendar/`.
 
 ## config.py
 
@@ -126,6 +143,7 @@ for file-ownership rules.
 
 ---
 
-Last structural update: 2026-07-09 (agent.py now marks processed
-messages read, sweeps stale holds, and isolates per-message failures —
-still a manually-run single pass, no scheduling loop)
+Last structural update: 2026-07-12 (new `gmail/profile.py` reads the
+account's real display name so drafted replies sign off with it
+instead of a placeholder; `llm/draft.py`'s four functions and
+`agent.py`'s threading updated accordingly)

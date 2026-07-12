@@ -15,11 +15,11 @@ DRAFT_MAX_OUTPUT_TOKENS = 1024
 
 
 def draft_booking_confirmation(
-    client: Any, message: Message, start: datetime, end: datetime
+    client: Any, message: Message, start: datetime, end: datetime, your_name: str
 ) -> str:
     """Draft a reply confirming a newly booked meeting."""
     prompt = (
-        f"{_intro(message)}\n\n"
+        f"{_intro(message, your_name)}\n\n"
         "Their proposed meeting has been booked for "
         f"{_format_range(start, end)}. Write a short, friendly email reply "
         "confirming the booking."
@@ -28,11 +28,15 @@ def draft_booking_confirmation(
 
 
 def draft_time_unavailable(
-    client: Any, message: Message, requested_start: datetime, requested_end: datetime
+    client: Any,
+    message: Message,
+    requested_start: datetime,
+    requested_end: datetime,
+    your_name: str,
 ) -> str:
     """Draft a reply saying the sender's requested time is not available."""
     prompt = (
-        f"{_intro(message)}\n\n"
+        f"{_intro(message, your_name)}\n\n"
         f"They proposed meeting at {_format_range(requested_start, requested_end)}, "
         "but that time is not available. Write a short, friendly email reply "
         "letting them know that time doesn't work, without proposing an "
@@ -41,30 +45,37 @@ def draft_time_unavailable(
     return _complete(client, prompt)
 
 
-def draft_slot_offer(client: Any, message: Message, slots: list[TimeSlot]) -> str:
+def draft_slot_offer(
+    client: Any, message: Message, slots: list[TimeSlot], your_name: str
+) -> str:
     """Draft a reply listing open slots for the sender to choose from."""
     slot_lines = "\n".join(f"- {_format_range(slot.start, slot.end)}" for slot in slots)
     prompt = (
-        f"{_intro(message)}\n\n"
+        f"{_intro(message, your_name)}\n\n"
         "They asked about availability. Write a short, friendly email reply "
         f"offering these open times and asking them to pick one:\n{slot_lines}"
     )
     return _complete(client, prompt)
 
 
-def draft_slot_confirmed(client: Any, message: Message, hold: Hold) -> str:
+def draft_slot_confirmed(
+    client: Any, message: Message, hold: Hold, your_name: str
+) -> str:
     """Draft a reply confirming which previously offered slot was accepted."""
     prompt = (
-        f"{_intro(message)}\n\n"
+        f"{_intro(message, your_name)}\n\n"
         f"They accepted the {_format_range(hold.start, hold.end)} slot. Write a "
         "short, friendly email reply confirming that time is booked."
     )
     return _complete(client, prompt)
 
 
-def _intro(message: Message) -> str:
+def _intro(message: Message, your_name: str) -> str:
     name = _greeting_name(message.from_address)
-    return f"You're replying to {name} about: {message.subject}"
+    return (
+        f"You are {your_name}, replying to {name} about: {message.subject}. "
+        f"Sign the email as {your_name}."
+    )
 
 
 def _format_range(start: datetime, end: datetime) -> str:

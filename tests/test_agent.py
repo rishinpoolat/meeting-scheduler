@@ -22,6 +22,7 @@ MESSAGE = Message(
 
 NOW = datetime(2026, 7, 9, 9, 0, tzinfo=timezone.utc)
 TZ_NAME = "UTC"
+YOUR_NAME = "Mohammed Rishin Poolat"
 
 HOLD = Hold(
     id="hold-1",
@@ -52,7 +53,14 @@ class TestProcessMessage:
             ) as mock_classify,
         ):
             process_message(
-                gmail_service, cal_service, llm_client, MESSAGE, "body", NOW, TZ_NAME
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
             )
 
         mock_list_holds.assert_called_once_with(
@@ -78,7 +86,14 @@ class TestProcessMessage:
             patch("agent.draft_slot_confirmed") as mock_draft_slot_confirmed,
         ):
             process_message(
-                gmail_service, cal_service, llm_client, MESSAGE, "body", NOW, TZ_NAME
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
             )
 
         mock_book.assert_not_called()
@@ -111,7 +126,14 @@ class TestProcessMessage:
             patch("agent.create_draft_reply") as mock_draft_reply,
         ):
             process_message(
-                gmail_service, cal_service, llm_client, MESSAGE, "body", NOW, TZ_NAME
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
             )
 
         mock_is_free.assert_called_once_with(cal_service, proposed_time, end, TZ_NAME)
@@ -123,7 +145,7 @@ class TestProcessMessage:
             "jane@example.com",
         )
         mock_draft_confirm.assert_called_once_with(
-            llm_client, MESSAGE, proposed_time, end
+            llm_client, MESSAGE, proposed_time, end, YOUR_NAME
         )
         mock_draft_unavailable.assert_not_called()
         mock_draft_reply.assert_called_once_with(gmail_service, MESSAGE, "confirmed!")
@@ -149,13 +171,20 @@ class TestProcessMessage:
             patch("agent.create_draft_reply") as mock_draft_reply,
         ):
             process_message(
-                gmail_service, cal_service, llm_client, MESSAGE, "body", NOW, TZ_NAME
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
             )
 
         mock_book.assert_not_called()
         mock_draft_confirm.assert_not_called()
         mock_draft_unavailable.assert_called_once_with(
-            llm_client, MESSAGE, proposed_time, end
+            llm_client, MESSAGE, proposed_time, end, YOUR_NAME
         )
         mock_draft_reply.assert_called_once_with(gmail_service, MESSAGE, "sorry!")
 
@@ -180,14 +209,21 @@ class TestProcessMessage:
             patch("agent.create_draft_reply") as mock_draft_reply,
         ):
             process_message(
-                gmail_service, cal_service, llm_client, MESSAGE, "body", NOW, TZ_NAME
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
             )
 
         mock_is_free.assert_not_called()
         mock_book.assert_not_called()
         mock_draft_confirm.assert_not_called()
         mock_draft_unavailable.assert_called_once_with(
-            llm_client, MESSAGE, proposed_time, end
+            llm_client, MESSAGE, proposed_time, end, YOUR_NAME
         )
         mock_draft_reply.assert_called_once_with(
             gmail_service, MESSAGE, "that's in the past!"
@@ -210,7 +246,14 @@ class TestProcessMessage:
             patch("agent.create_draft_reply"),
         ):
             process_message(
-                gmail_service, cal_service, llm_client, MESSAGE, "body", NOW, TZ_NAME
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
             )
 
         assert mock_book.call_args.args[4] == "jane@example.com"
@@ -243,7 +286,14 @@ class TestProcessMessage:
             patch("agent.create_draft_reply") as mock_draft_reply,
         ):
             process_message(
-                gmail_service, cal_service, llm_client, MESSAGE, "body", NOW, TZ_NAME
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
             )
 
         mock_find_slots.assert_called_once_with(cal_service, now=NOW)
@@ -257,7 +307,7 @@ class TestProcessMessage:
                 "jane@example.com",
                 MESSAGE.thread_id,
             )
-        mock_draft_offer.assert_called_once_with(llm_client, MESSAGE, slots)
+        mock_draft_offer.assert_called_once_with(llm_client, MESSAGE, slots, YOUR_NAME)
         mock_draft_reply.assert_called_once_with(
             gmail_service, MESSAGE, "here are some times"
         )
@@ -280,11 +330,18 @@ class TestProcessMessage:
             patch("agent.create_draft_reply") as mock_draft_reply,
         ):
             process_message(
-                gmail_service, cal_service, llm_client, MESSAGE, "body", NOW, TZ_NAME
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
             )
 
         mock_create_hold.assert_not_called()
-        mock_draft_offer.assert_called_once_with(llm_client, MESSAGE, [])
+        mock_draft_offer.assert_called_once_with(llm_client, MESSAGE, [], YOUR_NAME)
         mock_draft_reply.assert_called_once_with(gmail_service, MESSAGE, "nothing open")
 
     def test_accept_slot_confirms_hold_with_correct_arg_order(self) -> None:
@@ -302,11 +359,20 @@ class TestProcessMessage:
             patch("agent.create_draft_reply") as mock_draft_reply,
         ):
             process_message(
-                gmail_service, cal_service, llm_client, MESSAGE, "body", NOW, TZ_NAME
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
             )
 
         mock_confirm.assert_called_once_with(cal_service, MESSAGE.thread_id, HOLD.id)
-        mock_draft_confirmed.assert_called_once_with(llm_client, MESSAGE, HOLD)
+        mock_draft_confirmed.assert_called_once_with(
+            llm_client, MESSAGE, HOLD, YOUR_NAME
+        )
         mock_draft_reply.assert_called_once_with(gmail_service, MESSAGE, "booked!")
 
 
@@ -334,6 +400,7 @@ class TestRunCycle:
         with (
             patch("agent.expire_stale_holds") as mock_sweep,
             patch("agent.get_calendar_timezone", return_value=TZ_NAME),
+            patch("agent.get_display_name", return_value=YOUR_NAME),
             patch("agent.list_unread_message_ids", return_value=["m1", "m2"]),
             patch(
                 "agent.get_message", side_effect=[message_1, message_2]
@@ -371,7 +438,7 @@ class TestRunCycle:
             message_2,
             "body2",
         )
-        # same now/tz_name reused across both calls
+        # same now/tz_name/your_name reused across both calls
         assert first_call.args[5:] == second_call.args[5:]
         assert mock_mark_read.call_args_list == [
             ((gmail_service, "m1"),),
@@ -384,6 +451,7 @@ class TestRunCycle:
         with (
             patch("agent.expire_stale_holds"),
             patch("agent.get_calendar_timezone", return_value="America/New_York"),
+            patch("agent.get_display_name", return_value=YOUR_NAME),
             patch("agent.list_unread_message_ids", return_value=["m1"]),
             patch(
                 "agent.get_message",
@@ -400,12 +468,14 @@ class TestRunCycle:
         mock_datetime.now.assert_called_once_with(ZoneInfo("America/New_York"))
         assert mock_process.call_args.args[5] == fixed_now
         assert mock_process.call_args.args[6] == "America/New_York"
+        assert mock_process.call_args.args[7] == YOUR_NAME
 
     def test_with_no_unread_messages_does_nothing(self) -> None:
         gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
         with (
             patch("agent.expire_stale_holds"),
             patch("agent.get_calendar_timezone", return_value=TZ_NAME) as mock_tz,
+            patch("agent.get_display_name", return_value=YOUR_NAME) as mock_name,
             patch("agent.list_unread_message_ids", return_value=[]),
             patch("agent.process_message") as mock_process,
             patch("agent.mark_as_read") as mock_mark_read,
@@ -413,6 +483,7 @@ class TestRunCycle:
             run_cycle(gmail_service, cal_service, llm_client)
 
         mock_tz.assert_called_once_with(cal_service)
+        mock_name.assert_called_once_with(gmail_service)
         mock_process.assert_not_called()
         mock_mark_read.assert_not_called()
 
@@ -430,6 +501,7 @@ class TestRunCycle:
         with (
             patch("agent.expire_stale_holds", side_effect=_record_sweep),
             patch("agent.get_calendar_timezone", return_value=TZ_NAME),
+            patch("agent.get_display_name", return_value=YOUR_NAME),
             patch("agent.list_unread_message_ids", side_effect=_record_list),
         ):
             run_cycle(gmail_service, cal_service, llm_client)
@@ -441,6 +513,7 @@ class TestRunCycle:
         with (
             patch("agent.expire_stale_holds", side_effect=Exception("sweep boom")),
             patch("agent.get_calendar_timezone", return_value=TZ_NAME),
+            patch("agent.get_display_name", return_value=YOUR_NAME),
             patch("agent.list_unread_message_ids") as mock_list,
         ):
             with pytest.raises(Exception, match="sweep boom"):
@@ -453,6 +526,7 @@ class TestRunCycle:
         with (
             patch("agent.expire_stale_holds"),
             patch("agent.get_calendar_timezone", return_value=TZ_NAME),
+            patch("agent.get_display_name", return_value=YOUR_NAME),
             patch("agent.list_unread_message_ids", return_value=["m1"]),
             patch("agent.get_message", return_value=MESSAGE),
             patch("agent.get_message_body", return_value="body"),
@@ -471,6 +545,7 @@ class TestRunCycle:
         with (
             patch("agent.expire_stale_holds"),
             patch("agent.get_calendar_timezone", return_value=TZ_NAME),
+            patch("agent.get_display_name", return_value=YOUR_NAME),
             patch("agent.list_unread_message_ids", return_value=["m1", "m2"]),
             patch("agent.get_message", return_value=MESSAGE),
             patch("agent.get_message_body", return_value="body"),
@@ -494,6 +569,7 @@ class TestRunCycle:
         with (
             patch("agent.expire_stale_holds"),
             patch("agent.get_calendar_timezone", return_value=TZ_NAME),
+            patch("agent.get_display_name", return_value=YOUR_NAME),
             patch("agent.list_unread_message_ids", return_value=["m1", "m2"]),
             patch(
                 "agent.get_message", side_effect=[Exception("fetch failed"), MESSAGE]
@@ -514,6 +590,7 @@ class TestRunCycle:
         with (
             patch("agent.expire_stale_holds"),
             patch("agent.get_calendar_timezone", return_value=TZ_NAME),
+            patch("agent.get_display_name", return_value=YOUR_NAME),
             patch("agent.list_unread_message_ids", return_value=["m1", "m2"]),
             patch("agent.get_message", return_value=MESSAGE),
             patch("agent.get_message_body", return_value="body"),
@@ -534,6 +611,7 @@ class TestRunCycle:
         with (
             patch("agent.expire_stale_holds"),
             patch("agent.get_calendar_timezone", return_value=TZ_NAME),
+            patch("agent.get_display_name", return_value=YOUR_NAME),
             patch("agent.list_unread_message_ids", return_value=["m1"]),
             patch("agent.get_message", return_value=MESSAGE),
             patch("agent.get_message_body", return_value="body"),

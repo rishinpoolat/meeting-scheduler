@@ -28,12 +28,13 @@ MESSAGE = Message(
 START = datetime(2026, 7, 9, 9, 0, tzinfo=timezone.utc)
 END = datetime(2026, 7, 9, 9, 30, tzinfo=timezone.utc)
 HOLD = Hold(id="hold-1", thread_id="thread-1", start=START, end=END, created=START)
+YOUR_NAME = "Mohammed Rishin Poolat"
 
 DRAFT_CASES = [
-    (draft_booking_confirmation, (MESSAGE, START, END)),
-    (draft_time_unavailable, (MESSAGE, START, END)),
-    (draft_slot_offer, (MESSAGE, [TimeSlot(start=START, end=END)])),
-    (draft_slot_confirmed, (MESSAGE, HOLD)),
+    (draft_booking_confirmation, (MESSAGE, START, END, YOUR_NAME)),
+    (draft_time_unavailable, (MESSAGE, START, END, YOUR_NAME)),
+    (draft_slot_offer, (MESSAGE, [TimeSlot(start=START, end=END)], YOUR_NAME)),
+    (draft_slot_confirmed, (MESSAGE, HOLD, YOUR_NAME)),
 ]
 
 
@@ -63,7 +64,7 @@ def _prompt(client):
 def test_draft_booking_confirmation_includes_start_end_in_prompt():
     client = _client_with_text("Sounds great, see you then!")
 
-    result = draft_booking_confirmation(client, MESSAGE, START, END)
+    result = draft_booking_confirmation(client, MESSAGE, START, END, YOUR_NAME)
 
     assert result == "Sounds great, see you then!"
     prompt = _prompt(client)
@@ -74,7 +75,7 @@ def test_draft_booking_confirmation_includes_start_end_in_prompt():
 def test_draft_time_unavailable_includes_requested_time_in_prompt():
     client = _client_with_text("Sorry, that time doesn't work.")
 
-    draft_time_unavailable(client, MESSAGE, START, END)
+    draft_time_unavailable(client, MESSAGE, START, END, YOUR_NAME)
 
     prompt = _prompt(client)
     assert "09:00" in prompt
@@ -88,7 +89,7 @@ def test_draft_slot_offer_includes_all_slots_in_prompt():
         TimeSlot(start=START.replace(hour=13), end=END.replace(hour=13, minute=30)),
     ]
 
-    draft_slot_offer(client, MESSAGE, slots)
+    draft_slot_offer(client, MESSAGE, slots, YOUR_NAME)
 
     prompt = _prompt(client)
     assert "09:00" in prompt
@@ -98,11 +99,21 @@ def test_draft_slot_offer_includes_all_slots_in_prompt():
 def test_draft_slot_confirmed_includes_hold_time_in_prompt():
     client = _client_with_text("Confirmed!")
 
-    draft_slot_confirmed(client, MESSAGE, HOLD)
+    draft_slot_confirmed(client, MESSAGE, HOLD, YOUR_NAME)
 
     prompt = _prompt(client)
     assert "09:00" in prompt
     assert "09:30" in prompt
+
+
+@pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)
+def test_draft_functions_include_your_name_in_prompt(draft_fn, args):
+    client = _client_with_text("Reply text.")
+
+    draft_fn(client, *args)
+
+    prompt = _prompt(client)
+    assert YOUR_NAME in prompt
 
 
 @pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)
