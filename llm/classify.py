@@ -13,7 +13,7 @@ from gmail.read import Message
 
 Intent = Literal["propose_time", "ask_availability", "accept_slot", "irrelevant"]
 
-# gemini-2.5-flash's "thinking" tokens otherwise share this same budget
+# Gemini flash models' "thinking" tokens otherwise share this same budget
 # (AUTOMATIC by default) before any JSON is emitted, which can silently
 # truncate the response on a more complex email; disabled below via
 # thinking_budget=0 since this extraction task doesn't need chain-of-thought.

@@ -160,7 +160,7 @@ def _complete(client: Any, prompt: str) -> str:
         contents=prompt,
         config=types.GenerateContentConfig(
             max_output_tokens=DRAFT_MAX_OUTPUT_TOKENS,
-            # Same fix as llm/classify.py: without this, gemini-2.5-flash's
+            # Same fix as llm/classify.py: without this, Gemini flash models'
             # internal "thinking" tokens share this budget and could silently
             # truncate the reply text (no response_schema here to detect it
             # via a parse failure - a truncated draft would otherwise slip

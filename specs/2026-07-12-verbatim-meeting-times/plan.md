@@ -49,11 +49,28 @@
 
 **Committed:** 2026-07-12, `fix/verbatim-meeting-times` commit
 `1f0d0bb` (also folded in an unrelated one-line `config.py` fix found
-during this session: `GEMINI_MODEL`'s default had been accidentally
-changed to the non-existent `"gemini-3.5-flash"`, causing real `403
-PERMISSION_DENIED` errors — reverted to `"gemini-2.5-flash"`).
+during this session: `GEMINI_MODEL`'s default had been changed to
+`"gemini-3.5-flash"`, which was assumed to be a typo and reverted to
+`"gemini-2.5-flash"` — **this assumption turned out to be wrong**, see
+correction below).
 
 **Merged:** 2026-07-12 to `main` via PR #8, merge commit `6e1b483`.
+
+**Correction (2026-07-12, post-merge hotfix, direct to `main`):** the
+`gemini-3.5-flash` → `gemini-2.5-flash` revert above was itself
+mistaken — `gemini-3.5-flash` is a real model the developer's account
+has access to (confirmed via `client.models.list()`), and
+`gemini-2.5-flash` had actually been sunset for new accounts
+(`404 NOT_FOUND: "This model models/gemini-2.5-flash is no longer
+available to new users"`, hit live during real testing after the
+merge). `config.py`'s default changed again, this time to
+`gemini-flash-latest` (an alias that always resolves to Google's
+current recommended flash model, chosen over re-pinning to
+`gemini-3.5-flash` specifically to avoid a third deprecation
+scramble) — confirmed working via a live `generate_content` call.
+Hardcoded `"gemini-2.5-flash"` mentions in code comments
+(`llm/classify.py`, `llm/draft.py`, `scripts/check_llm.py`) were also
+generalized to not name a specific model version.
 
 **Still open:** live end-to-end verification against the real Gemini
 API is blocked by the free tier's exhausted daily quota (20

@@ -23,8 +23,9 @@ from llm.draft import (
     draft_time_unavailable,
 )
 
-# gemini-2.5-flash's free tier allows 5 requests/minute; space calls out
-# comfortably under that instead of bursting through the whole script.
+# Gemini's free tier allows only a few requests/minute (and a low daily
+# cap); space calls out comfortably under that instead of bursting
+# through the whole script.
 SLEEP_SECONDS = 15
 
 TZ = ZoneInfo("America/New_York")
