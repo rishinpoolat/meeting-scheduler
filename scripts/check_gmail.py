@@ -10,11 +10,19 @@ from gmail.client import get_service
 from gmail.draft import create_draft_reply
 from gmail.profile import get_display_name
 from gmail.read import get_message, list_unread_message_ids
+from llm.draft import DraftBody
 
-PLACEHOLDER_BODY = (
-    "Thanks for your message! This is a placeholder reply from the "
-    "meeting-scheduler agent — automatic scheduling logic isn't wired "
-    "up yet."
+PLACEHOLDER_BODY = DraftBody(
+    text=(
+        "Thanks for your message! This is a placeholder reply from the "
+        "meeting-scheduler agent — automatic scheduling logic isn't wired "
+        "up yet."
+    ),
+    html=(
+        "<p>Thanks for your message! This is a placeholder reply from the "
+        "meeting-scheduler agent — automatic scheduling logic isn't wired "
+        "up yet.</p>"
+    ),
 )
 
 

@@ -47,9 +47,10 @@ for both the free/busy check and the booking. See
 `specs/2026-07-09-agent-orchestration/spec.md`,
 `specs/2026-07-09-polling-loop/spec.md`,
 `specs/2026-07-12-draft-signature-name/spec.md`,
-`specs/2026-07-12-earliest-offer-time/spec.md`, and
-`specs/2026-07-12-verbatim-meeting-times/spec.md` for the full
-decision log.
+`specs/2026-07-12-earliest-offer-time/spec.md`,
+`specs/2026-07-12-verbatim-meeting-times/spec.md`, and
+`specs/2026-07-12-html-email-drafts/spec.md` for the full decision
+log.
 
 ## auth/
 
@@ -69,8 +70,13 @@ Gmail API wrapper. `client.py` builds the authenticated service via
 fetches header metadata (`Message` dataclass) and body text, and marks
 a message read via `mark_as_read()` (removes the `UNREAD` label, used
 by `agent.py` once a message is successfully processed so re-running
-`agent.py` doesn't reprocess it); `draft.py` creates threaded draft
-replies (`In-Reply-To`/`References`/`threadId`); `profile.py`'s
+`agent.py` doesn't reprocess it); `draft.py`'s `create_draft_reply()`
+creates threaded draft replies (`In-Reply-To`/`References`/`threadId`)
+as `multipart/alternative` MIME — `body.text` via `set_content()`,
+`body.html` via `add_alternative(..., subtype="html")` — taking a
+`llm.draft.DraftBody` rather than a plain string; this is the one
+place `gmail/` imports a type from `llm/` (every other cross-module
+dependency in this project points the other way); `profile.py`'s
 `get_display_name()` reads the account's own configured "send mail
 as" name (`users.settings.sendAs.list`, the `isPrimary` entry — needs
 the `gmail.settings.basic` scope), used by `agent.py` to sign drafted
@@ -125,28 +131,39 @@ instead of downgrading the whole classification, deliberately unlike
 `proposed_time`/`accepted_slot_index`, since it's an optional
 refinement and `ask_availability` stays fully actionable without it
 (see `specs/2026-07-12-earliest-offer-time/spec.md`); `draft.py` has four
-outcome-specific functions (not one polymorphic type) that draft reply
-text via plain Gemini completions, one per calendar outcome, each
-taking a `your_name: str` (the account's display name, fetched once
-per run by `agent.py` via `gmail.profile.get_display_name()`) so the
-prompt tells Gemini who to sign the reply as instead of leaving it a
-placeholder. Gemini is never trusted to write an actual date/time into
-the drafted text itself — it was found (live-verified against the
-real API) to non-deterministically corrupt an exact time when asked
-to freely reformat one into prose. Instead every function that has a
-time to communicate asks Gemini to leave a literal token
-(`[[MEETING_TIME]]` or, for the multi-slot case, `[[SLOT_LIST]]`)
-where the value belongs; `_complete_with_placeholder()` then requires
-that token to be present and substitutes it with the real,
-deterministically-formatted value from `_format_range()` — raising
-`ValueError` (routed through `agent.py`'s existing per-message
-retry-next-run handling) if the placeholder is missing, rather than
-risking an unverified or corrupted time reaching a draft. This
+outcome-specific functions (not one polymorphic type) that each return
+a `DraftBody(text, html)` dataclass, not a plain string — one Gemini
+completion per function, one per calendar outcome, each taking a
+`your_name: str` (the account's display name, fetched once per run by
+`agent.py` via `gmail.profile.get_display_name()`) so the prompt tells
+Gemini who to sign the reply as instead of leaving it a placeholder.
+Gemini is never trusted to write an actual date/time into the drafted
+text itself — it was found (live-verified against the real API) to
+non-deterministically corrupt an exact time when asked to freely
+reformat one into prose. Instead every function that has a time to
+communicate asks Gemini to leave a literal token (`[[MEETING_TIME]]`
+or, for the multi-slot case, `[[SLOT_LIST]]`) *alone on its own
+paragraph*; `_complete_with_placeholder()` requires exactly one
+paragraph to equal that token (not just "the token appears somewhere"
+— a block-level HTML box substituted mid-sentence produces invalid,
+silently-reflowed HTML) and derives both a plain-text and an HTML
+version from the same template: non-placeholder paragraphs are
+`html.escape()`'d and wrapped in `<p>` (internal `\n` → `<br>`); the
+placeholder paragraph becomes a Python-built, inline-styled HTML box
+(bold date, muted time, built straight from the `datetime`/`TimeSlot`
+objects already in scope — never by parsing the plain-text value back
+apart) — raising `ValueError` (routed through `agent.py`'s existing
+per-message retry-next-run handling) if the placeholder is missing,
+duplicated, or not alone on its own paragraph, rather than risking an
+unverified, corrupted, or malformed-HTML draft. This
 verify-then-substitute pattern is the general approach for any future
 LLM output that must contain an exact, non-negotiable value — see
-`specs/2026-07-12-verbatim-meeting-times/spec.md`. Pure module — no
-Gmail/Calendar API calls happen here; the orchestrator (`agent.py`)
-wires `llm/` together with `gmail/`/`gcalendar/`.
+`specs/2026-07-12-verbatim-meeting-times/spec.md` and
+`specs/2026-07-12-html-email-drafts/spec.md`. Otherwise a pure module —
+no Gmail/Calendar API calls happen here — though `gmail/draft.py` now
+imports `DraftBody` from here (see `gmail/`'s entry above); the
+orchestrator (`agent.py`) wires `llm/` together with
+`gmail/`/`gcalendar/`.
 
 ## config.py
 
@@ -190,4 +207,7 @@ preference instead of always starting from `now`; `llm/draft.py` no
 longer trusts Gemini to write dates/times into drafts itself —
 verify-then-substitute a literal placeholder token instead, since
 free-text reformatting was found to non-deterministically corrupt
-exact times)
+exact times; `llm/draft.py`'s four functions now return a
+`DraftBody(text, html)` instead of a plain string, and
+`gmail/draft.py` sends both parts as `multipart/alternative` — the
+first case of `gmail/` importing a type from `llm/`)

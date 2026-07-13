@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 from gmail.draft import create_draft_reply
 from gmail.read import Message
+from llm.draft import DraftBody
 
 
 def _service():
@@ -30,8 +31,12 @@ def test_create_draft_reply_builds_threaded_mime_with_references():
         references_header="<prev1@mail.gmail.com>",
         snippet="",
     )
+    body = DraftBody(
+        text="Sure, let's meet Tuesday at 2pm.",
+        html="<p>Sure, let's meet <strong>Tuesday at 2pm</strong>.</p>",
+    )
 
-    result = create_draft_reply(service, message, "Sure, let's meet Tuesday at 2pm.")
+    result = create_draft_reply(service, message, body)
 
     assert result == {"id": "draft-1"}
     _, kwargs = service.users.return_value.drafts.return_value.create.call_args
@@ -43,7 +48,34 @@ def test_create_draft_reply_builds_threaded_mime_with_references():
     assert mime["Subject"] == "Re: Meeting request"
     assert mime["In-Reply-To"] == "<abc123@mail.gmail.com>"
     assert mime["References"] == "<prev1@mail.gmail.com> <abc123@mail.gmail.com>"
-    assert mime.get_content().strip() == "Sure, let's meet Tuesday at 2pm."
+
+
+def test_create_draft_reply_sends_multipart_alternative_with_matching_parts():
+    service = _service()
+    message = Message(
+        id="msg-1",
+        thread_id="thread-1",
+        subject="Meeting request",
+        from_address="Jane <jane@example.com>",
+        message_id_header="<abc123@mail.gmail.com>",
+        references_header="",
+        snippet="",
+    )
+    body = DraftBody(
+        text="Sure, let's meet Tuesday at 2pm.",
+        html="<p>Sure, let's meet <strong>Tuesday at 2pm</strong>.</p>",
+    )
+
+    create_draft_reply(service, message, body)
+
+    _, kwargs = service.users.return_value.drafts.return_value.create.call_args
+    mime = _decode_raw(kwargs)
+
+    assert mime.get_content_type() == "multipart/alternative"
+    plain_part = mime.get_body(preferencelist=("plain",))
+    html_part = mime.get_body(preferencelist=("html",))
+    assert plain_part.get_content().strip() == body.text
+    assert body.html.strip() in html_part.get_content()
 
 
 def test_create_draft_reply_does_not_double_prefix_re_subject():
@@ -58,7 +90,7 @@ def test_create_draft_reply_does_not_double_prefix_re_subject():
         snippet="",
     )
 
-    create_draft_reply(service, message, "body")
+    create_draft_reply(service, message, DraftBody(text="body", html="<p>body</p>"))
 
     _, kwargs = service.users.return_value.drafts.return_value.create.call_args
     mime = _decode_raw(kwargs)
@@ -77,7 +109,7 @@ def test_create_draft_reply_does_not_double_prefix_case_insensitive_re_subject()
         snippet="",
     )
 
-    create_draft_reply(service, message, "body")
+    create_draft_reply(service, message, DraftBody(text="body", html="<p>body</p>"))
 
     _, kwargs = service.users.return_value.drafts.return_value.create.call_args
     mime = _decode_raw(kwargs)
@@ -96,7 +128,7 @@ def test_create_draft_reply_handles_no_prior_references():
         snippet="",
     )
 
-    create_draft_reply(service, message, "body")
+    create_draft_reply(service, message, DraftBody(text="body", html="<p>body</p>"))
 
     _, kwargs = service.users.return_value.drafts.return_value.create.call_args
     mime = _decode_raw(kwargs)
