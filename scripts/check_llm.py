@@ -7,7 +7,9 @@ under the free tier's per-minute rate limit. Prints results for human
 review — no assertions, no Gmail/Calendar API calls (llm/ is pure).
 """
 
+import tempfile
 import time
+import webbrowser
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -17,6 +19,7 @@ from gmail.read import Message
 from llm.classify import classify_email
 from llm.client import get_client
 from llm.draft import (
+    DraftBody,
     draft_booking_confirmation,
     draft_slot_confirmed,
     draft_slot_offer,
@@ -63,6 +66,20 @@ CANDIDATE_HOLDS = [
 ]
 
 
+def _show_draft(label: str, body: DraftBody) -> None:
+    """Print the plain-text version and pop the HTML version open in a
+    browser tab, so the boxed/bold rendering can actually be eyeballed."""
+    print(f"  {label} (text) ->")
+    print(body.text)
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".html", delete=False, encoding="utf-8"
+    ) as f:
+        f.write(body.html)
+        path = f.name
+    print(f"  {label} (html) -> {path}")
+    webbrowser.open(f"file://{path}")
+
+
 def main() -> None:
     client = get_client()
 
@@ -82,12 +99,16 @@ def main() -> None:
     print(f"  classify -> {result}")
     time.sleep(SLEEP_SECONDS)
 
-    print("  draft_booking_confirmation ->")
-    print(draft_booking_confirmation(client, MESSAGE, start, end, YOUR_NAME))
+    _show_draft(
+        "draft_booking_confirmation",
+        draft_booking_confirmation(client, MESSAGE, start, end, YOUR_NAME),
+    )
     time.sleep(SLEEP_SECONDS)
 
-    print("  draft_time_unavailable ->")
-    print(draft_time_unavailable(client, MESSAGE, start, end, YOUR_NAME))
+    _show_draft(
+        "draft_time_unavailable",
+        draft_time_unavailable(client, MESSAGE, start, end, YOUR_NAME),
+    )
     time.sleep(SLEEP_SECONDS)
 
     print("\n[ask_availability]")
@@ -101,9 +122,8 @@ def main() -> None:
     print(f"  classify -> {result}")
     time.sleep(SLEEP_SECONDS)
 
-    print("  draft_slot_offer ->")
     slots = [TimeSlot(start=hold.start, end=hold.end) for hold in CANDIDATE_HOLDS]
-    print(draft_slot_offer(client, MESSAGE, slots, YOUR_NAME))
+    _show_draft("draft_slot_offer", draft_slot_offer(client, MESSAGE, slots, YOUR_NAME))
     time.sleep(SLEEP_SECONDS)
 
     print("\n[irrelevant]")
@@ -129,8 +149,10 @@ def main() -> None:
     time.sleep(SLEEP_SECONDS)
 
     if result.matched_hold is not None:
-        print("  draft_slot_confirmed ->")
-        print(draft_slot_confirmed(client, MESSAGE, result.matched_hold, YOUR_NAME))
+        _show_draft(
+            "draft_slot_confirmed",
+            draft_slot_confirmed(client, MESSAGE, result.matched_hold, YOUR_NAME),
+        )
 
 
 if __name__ == "__main__":

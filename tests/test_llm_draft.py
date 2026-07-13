@@ -108,13 +108,21 @@ def test_format_range_produces_unambiguous_12_hour_phrase():
 
 
 def test_draft_booking_confirmation_replaces_placeholder_with_formatted_time():
-    client = _client_with_text("Sounds great, see you [[MEETING_TIME]]!")
+    client = _client_with_text(
+        "Sounds great, see you soon!\n\n[[MEETING_TIME]]\n\nBest,\nMohammed Rishin Poolat"
+    )
 
     result = draft_booking_confirmation(client, MESSAGE, START, END, YOUR_NAME)
 
-    assert result == (
-        "Sounds great, see you Thursday, July 9, 2026 from 9:00 AM to 9:30 AM!"
+    assert result.text == (
+        "Sounds great, see you soon!\n\n"
+        "Thursday, July 9, 2026 from 9:00 AM to 9:30 AM\n\n"
+        "Best,\nMohammed Rishin Poolat"
     )
+    assert "[[MEETING_TIME]]" not in result.html
+    assert "Thursday, July 9, 2026" in result.html
+    assert "9:00 AM" in result.html
+    assert "<table" in result.html
     prompt = _prompt(client)
     assert "09:00" not in prompt
     assert "9:00 AM" not in prompt
@@ -122,31 +130,45 @@ def test_draft_booking_confirmation_replaces_placeholder_with_formatted_time():
 
 
 def test_draft_time_unavailable_replaces_placeholder_with_formatted_time():
-    client = _client_with_text("Sorry, [[MEETING_TIME]] doesn't work.")
+    client = _client_with_text(
+        "Sorry, that doesn't work.\n\n[[MEETING_TIME]]\n\nBest,\nMohammed Rishin Poolat"
+    )
 
     result = draft_time_unavailable(client, MESSAGE, START, END, YOUR_NAME)
 
-    assert result == (
-        "Sorry, Thursday, July 9, 2026 from 9:00 AM to 9:30 AM doesn't work."
+    assert result.text == (
+        "Sorry, that doesn't work.\n\n"
+        "Thursday, July 9, 2026 from 9:00 AM to 9:30 AM\n\n"
+        "Best,\nMohammed Rishin Poolat"
     )
+    assert "[[MEETING_TIME]]" not in result.html
+    assert "9:00 AM" in result.html
     prompt = _prompt(client)
     assert "09:00" not in prompt
     assert "[[MEETING_TIME]]" in prompt
 
 
 def test_draft_slot_confirmed_replaces_placeholder_with_formatted_time():
-    client = _client_with_text("Confirmed for [[MEETING_TIME]]!")
+    client = _client_with_text(
+        "Confirmed!\n\n[[MEETING_TIME]]\n\nBest,\nMohammed Rishin Poolat"
+    )
 
     result = draft_slot_confirmed(client, MESSAGE, HOLD, YOUR_NAME)
 
-    assert result == "Confirmed for Thursday, July 9, 2026 from 9:00 AM to 9:30 AM!"
+    assert result.text == (
+        "Confirmed!\n\n"
+        "Thursday, July 9, 2026 from 9:00 AM to 9:30 AM\n\n"
+        "Best,\nMohammed Rishin Poolat"
+    )
+    assert "[[MEETING_TIME]]" not in result.html
+    assert "9:00 AM" in result.html
     prompt = _prompt(client)
     assert "09:00" not in prompt
     assert "[[MEETING_TIME]]" in prompt
 
 
 def test_draft_slot_offer_replaces_placeholder_with_bulleted_slot_list():
-    client = _client_with_text("Here are some times:\n[[SLOT_LIST]]\nLet me know!")
+    client = _client_with_text("Here are some times:\n\n[[SLOT_LIST]]\n\nLet me know!")
     slots = [
         TimeSlot(start=START, end=END),
         TimeSlot(start=START.replace(hour=13), end=END.replace(hour=13, minute=30)),
@@ -157,7 +179,11 @@ def test_draft_slot_offer_replaces_placeholder_with_bulleted_slot_list():
     assert (
         "- Thursday, July 9, 2026 from 9:00 AM to 9:30 AM\n"
         "- Thursday, July 9, 2026 from 1:00 PM to 1:30 PM"
-    ) in result
+    ) in result.text
+    assert "[[SLOT_LIST]]" not in result.html
+    assert "<table" in result.html
+    assert "9:00 AM" in result.html
+    assert "1:00 PM" in result.html
     prompt = _prompt(client)
     assert "09:00" not in prompt
     assert "13:00" not in prompt
@@ -169,10 +195,34 @@ def test_draft_slot_offer_with_no_slots_skips_placeholder_and_completes_directly
 
     result = draft_slot_offer(client, MESSAGE, [], YOUR_NAME)
 
-    assert result == "Sorry, nothing is open right now."
+    assert result.text == "Sorry, nothing is open right now."
+    assert "Sorry, nothing is open right now." in result.html
+    assert "<p" in result.html
     prompt = _prompt(client)
     assert "[[SLOT_LIST]]" not in prompt
     assert "no open times" in prompt.lower()
+
+
+def test_draft_functions_escape_html_special_characters_in_prose():
+    client = _client_with_text(
+        "Tom & Jerry said <hi>!\n\n[[MEETING_TIME]]\n\nBest,\nMohammed Rishin Poolat"
+    )
+
+    result = draft_booking_confirmation(client, MESSAGE, START, END, YOUR_NAME)
+
+    assert "&amp;" in result.html
+    assert "&lt;hi&gt;" in result.html
+    assert "<hi>" not in result.html
+
+
+def test_draft_functions_convert_internal_newline_to_br_within_a_paragraph():
+    client = _client_with_text(
+        "Hello there!\n\n[[MEETING_TIME]]\n\nBest,\nMohammed Rishin Poolat"
+    )
+
+    result = draft_booking_confirmation(client, MESSAGE, START, END, YOUR_NAME)
+
+    assert "Best,<br>Mohammed Rishin Poolat" in result.html
 
 
 @pytest.mark.parametrize("draft_fn, args, placeholder", PLACEHOLDER_DRAFT_CASES)
@@ -190,14 +240,44 @@ def test_draft_functions_raise_value_error_when_placeholder_missing(
 
 
 @pytest.mark.parametrize("draft_fn, args, placeholder", PLACEHOLDER_DRAFT_CASES)
+def test_draft_functions_raise_value_error_when_placeholder_not_alone_on_own_paragraph(
+    draft_fn, args, placeholder
+):
+    # Simulates Gemini disobeying the "own paragraph" instruction and
+    # embedding the placeholder mid-sentence instead. Substituting a
+    # block-level HTML box there would produce invalid, silently-reflowed
+    # HTML (a <div>/<table> nested inside a <p>), so this must fail
+    # loudly rather than risk a broken draft.
+    client = _client_with_text(f"Sounds great, see you {placeholder} soon!")
+
+    with pytest.raises(ValueError):
+        draft_fn(client, *args)
+
+
+@pytest.mark.parametrize("draft_fn, args, placeholder", PLACEHOLDER_DRAFT_CASES)
 def test_draft_functions_raise_value_error_when_placeholder_duplicated(
     draft_fn, args, placeholder
 ):
-    # A duplicated placeholder is worse than a missing one if unguarded:
-    # str.replace(..., 1) would only fix the first occurrence, leaking a
-    # literal placeholder string into the drafted email. Must fail loudly
-    # instead of silently shipping a visibly broken draft.
-    client = _client_with_text(f"{placeholder} some text {placeholder}")
+    # A duplicated placeholder - even on separate paragraphs - is
+    # ambiguous about which one to substitute; must fail loudly instead
+    # of guessing or leaking a literal placeholder into the draft.
+    client = _client_with_text(f"{placeholder}\n\nsome text\n\n{placeholder}")
+
+    with pytest.raises(ValueError):
+        draft_fn(client, *args)
+
+
+@pytest.mark.parametrize("draft_fn, args, placeholder", PLACEHOLDER_DRAFT_CASES)
+def test_draft_functions_raise_value_error_when_placeholder_duplicated_mid_sentence(
+    draft_fn, args, placeholder
+):
+    # One isolated-paragraph occurrence plus one embedded mid-sentence
+    # occurrence must still be treated as a duplicate - paragraph-exact
+    # matching alone would count exactly one match and let the
+    # mid-sentence copy leak the literal placeholder into the draft.
+    client = _client_with_text(
+        f"see you {placeholder} soon!\n\n{placeholder}\n\nBest,\nName"
+    )
 
     with pytest.raises(ValueError):
         draft_fn(client, *args)
@@ -205,7 +285,7 @@ def test_draft_functions_raise_value_error_when_placeholder_duplicated(
 
 @pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)
 def test_draft_functions_include_your_name_in_prompt(draft_fn, args):
-    client = _client_with_text(f"Reply text {_placeholder_for(draft_fn)}.")
+    client = _client_with_text(f"Reply text.\n\n{_placeholder_for(draft_fn)}")
 
     draft_fn(client, *args)
 
@@ -215,7 +295,7 @@ def test_draft_functions_include_your_name_in_prompt(draft_fn, args):
 
 @pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)
 def test_draft_functions_instruct_no_subject_line(draft_fn, args):
-    client = _client_with_text(f"Reply text {_placeholder_for(draft_fn)}.")
+    client = _client_with_text(f"Reply text.\n\n{_placeholder_for(draft_fn)}")
 
     draft_fn(client, *args)
 
@@ -224,27 +304,37 @@ def test_draft_functions_instruct_no_subject_line(draft_fn, args):
 
 
 @pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)
+def test_draft_functions_instruct_no_markdown(draft_fn, args):
+    client = _client_with_text(f"Reply text.\n\n{_placeholder_for(draft_fn)}")
+
+    draft_fn(client, *args)
+
+    prompt = _prompt(client)
+    assert "markdown" in prompt.lower()
+
+
+@pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)
 def test_draft_functions_strip_leading_subject_line_despite_instruction(draft_fn, args):
     placeholder = _placeholder_for(draft_fn)
     client = _client_with_text(
-        f"Subject: Re: Meeting Schedule\n\nHi there,\n\nBody {placeholder}."
+        f"Subject: Re: Meeting Schedule\n\nHi there,\n\nBody text.\n\n{placeholder}"
     )
 
     result = draft_fn(client, *args)
 
-    assert result.startswith("Hi there,\n\nBody ")
-    assert placeholder not in result
+    assert result.text.startswith("Hi there,\n\nBody text.")
+    assert placeholder not in result.text
 
 
 @pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)
 def test_draft_functions_use_correct_model_and_strip_response_text(draft_fn, args):
     placeholder = _placeholder_for(draft_fn)
-    client = _client_with_text(f"  Reply text {placeholder}.  ")
+    client = _client_with_text(f"  Reply text.\n\n{placeholder}  ")
 
     result = draft_fn(client, *args)
 
-    assert result.startswith("Reply text ")
-    assert placeholder not in result
+    assert result.text.startswith("Reply text.")
+    assert placeholder not in result.text
     _, kwargs = client.models.generate_content.call_args
     assert kwargs["model"] == GEMINI_MODEL
     # Locks in the thinking_budget=0 fix - draft.py has no response_schema
