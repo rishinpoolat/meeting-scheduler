@@ -94,3 +94,20 @@
   guaranteed-correct, Python-formatted value, raising if the
   placeholder is missing or duplicated. `llm/draft.py`.
   → [`specs/2026-07-12-verbatim-meeting-times/`](./2026-07-12-verbatim-meeting-times/)
+
+- **2026-07-12 — html-email-drafts**: Drafted replies are now sent as
+  `multipart/alternative` (plain text + HTML), not plain text only.
+  `llm/draft.py`'s four drafting functions return a new
+  `DraftBody(text, html)` dataclass instead of a plain string; Gemini
+  leaves the meeting-time/slot-list placeholder alone on its own
+  paragraph, and `_complete_with_placeholder()` now requires both a
+  single isolated-paragraph match *and* a single total substring
+  occurrence (a review-caught gap: a mid-sentence duplicate alongside
+  one correctly isolated copy previously slipped through and could leak
+  the literal placeholder into a real draft) before deriving an
+  HTML-escaped `<p>`/`<br>` version and substituting a Python-built,
+  inline-styled HTML box for the placeholder paragraph.
+  `gmail/draft.py`'s `create_draft_reply()` sends both parts via
+  `set_content` + `add_alternative(subtype="html")`.
+  `llm/draft.py`, `gmail/draft.py`.
+  → [`specs/2026-07-12-html-email-drafts/`](./2026-07-12-html-email-drafts/)

@@ -51,3 +51,5 @@ test-runner: 161 passed, mypy clean, ruff clean.
 code-reviewer: one blocker found (duplication-check gap above) and
 fixed; no other issues.
 Developer pre-commit approval: given.
+
+Merged: commit `1b4f9e1`, PR #9, merged to `main` at `f9837cc`.
