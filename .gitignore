@@ -22,3 +22,4 @@ client_secret*.json
 # Private project/workflow docs, not for the public repo
 CLAUDE.md
 CODEBASE_MAP.md
+specs/

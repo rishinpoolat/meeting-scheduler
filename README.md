@@ -27,24 +27,21 @@ against your own Gmail/Calendar with your own credentials.
 
 ## Status
 
-All features on the original [roadmap](specs/ROADMAP.md) are shipped:
-OAuth2 (Gmail + Calendar), reading unread Gmail messages and drafting
-threaded replies, the Google Calendar layer (free/busy checks,
-timeframe-aware open-slot finding, confirmed booking, tentative
-holds), Gemini-based email classification + reply drafting, and
-`agent.py` wiring all of that into one run — sweeping stale holds,
-processing unread mail (capped per run to stay under Gemini's
-free-tier limits), and marking each handled message read so
-re-running doesn't redraft the same replies. `agent.py` is a
-manually-run, single-pass script by design (no scheduling loop — just
-run `python agent.py` whenever you want to check for new mail).
+All features on the original roadmap are shipped: OAuth2 (Gmail +
+Calendar), reading unread Gmail messages and drafting threaded
+replies, the Google Calendar layer (free/busy checks, timeframe-aware
+open-slot finding, confirmed booking, tentative holds), Gemini-based
+email classification + reply drafting, and `agent.py` wiring all of
+that into one run — sweeping stale holds, processing unread mail
+(capped per run to stay under Gemini's free-tier limits), and marking
+each handled message read so re-running doesn't redraft the same
+replies. `agent.py` is a manually-run, single-pass script by design
+(no scheduling loop — just run `python agent.py` whenever you want to
+check for new mail).
 
 Beyond the original roadmap, a round of testing against a real inbox
 surfaced and fixed several reliability issues — see
-[Reliability notes](#reliability-notes) below and
-[`specs/INDEX.md`](specs/INDEX.md) for the full log of what's shipped
-(each entry links to a `spec.md`/`plan.md` with the full decision
-log, including root-cause analysis for the reliability fixes).
+[Reliability notes](#reliability-notes) below.
 
 ## Reliability notes
 
@@ -59,8 +56,7 @@ real inbox rather than mocked tests, and are worth knowing about:
   writing dates/times itself, and Python substitutes the
   guaranteed-correct value — raising an error (safely retried next
   run) if the placeholder is ever missing or duplicated, rather than
-  risking a wrong time reaching a real recipient. See
-  [`specs/2026-07-12-verbatim-meeting-times/`](specs/2026-07-12-verbatim-meeting-times/).
+  risking a wrong time reaching a real recipient.
 - **Gemini's free tier has both a per-minute *and* a daily quota**
   (as low as 20 requests/day on some models) — a real run hit both.
   `agent.py` caps unread polling by count and a 2-day window, and
@@ -192,17 +188,14 @@ imports resolve against the repo root.
 - `scripts/` — manual, real-network verification scripts (one per
   feature area).
 - `tests/` — mocked pytest suite, no real network calls.
-- `specs/` — per-feature spec/plan history (see
-  [`specs/INDEX.md`](specs/INDEX.md) and
-  [`specs/ROADMAP.md`](specs/ROADMAP.md)).
 
 ## Contributing
 
-Issues and PRs are welcome. This project develops every feature
-through a spec/plan cycle — see [`specs/`](specs/), particularly
-[`specs/INDEX.md`](specs/INDEX.md), for the reasoning behind a given
-piece of code before changing it. Not required for outside
-contributions, just useful context.
+Issues and PRs are welcome. Internally this project develops every
+feature through a spec/plan cycle before writing code, but that
+history is kept as local, private development notes and isn't part of
+the public repo — not required for outside contributions either, just
+how the maintainer works.
 
 ## License
 
