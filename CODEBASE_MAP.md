@@ -30,7 +30,7 @@ a single try/except — a failure anywhere in that sequence is logged
 codebase) with the message ID and leaves that message unread to retry
 on the next manual run, without aborting the rest of the run.
 `process_message()` unconditionally fetches
-`gcalendar.events.list_holds(thread_id=message.thread_id)` *before*
+`gcalendar.events.list_holds(thread_id=message.thread_id)` _before_
 classifying — this is what wires thread-hold-acceptance matching into
 `llm.classify.classify_email()` — then dispatches on
 `Classification.intent`: `propose_time` books if free (else drafts
@@ -41,7 +41,7 @@ is respected instead of always offering starting today), `accept_slot`
 confirms the matched hold, `irrelevant` is
 a no-op (but still gets marked read, so spam isn't reclassified by
 Gemini on every re-run). `classify_email()` returns only a proposed
-*start* time for `propose_time`, so `agent.py` reuses
+_start_ time for `propose_time`, so `agent.py` reuses
 `gcalendar.slots.SLOT_DURATION` (30 min) as the assumed meeting length
 for both the free/busy check and the booking. See
 `specs/2026-07-09-agent-orchestration/spec.md`,
@@ -142,8 +142,8 @@ text itself — it was found (live-verified against the real API) to
 non-deterministically corrupt an exact time when asked to freely
 reformat one into prose. Instead every function that has a time to
 communicate asks Gemini to leave a literal token (`[[MEETING_TIME]]`
-or, for the multi-slot case, `[[SLOT_LIST]]`) *alone on its own
-paragraph*; `_complete_with_placeholder()` requires exactly one
+or, for the multi-slot case, `[[SLOT_LIST]]`) _alone on its own
+paragraph_; `_complete_with_placeholder()` requires exactly one
 paragraph to equal that token (not just "the token appears somewhere"
 — a block-level HTML box substituted mid-sentence produces invalid,
 silently-reflowed HTML) and derives both a plain-text and an HTML
