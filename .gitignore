@@ -18,3 +18,7 @@ client_secret*.json
 
 # Claude Code local settings (machine-specific permissions, not shared)
 .claude/settings.local.json
+
+# Private project/workflow docs, not for the public repo
+CLAUDE.md
+CODEBASE_MAP.md

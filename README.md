@@ -183,16 +183,26 @@ imports resolve against the repo root.
 
 ## Project layout
 
-See [`CODEBASE_MAP.md`](CODEBASE_MAP.md) for a folder-by-folder
-breakdown of what lives where and why.
+- `agent.py` — entry point; one manually-run pass over unread mail.
+- `auth/` — OAuth2 credential loading, caching, and refresh.
+- `gmail/` — Gmail API wrapper (read unread mail, create draft replies).
+- `gcalendar/` — Google Calendar API wrapper (free/busy, open slots,
+  booking, tentative holds).
+- `llm/` — Gemini-based email classification and reply drafting.
+- `scripts/` — manual, real-network verification scripts (one per
+  feature area).
+- `tests/` — mocked pytest suite, no real network calls.
+- `specs/` — per-feature spec/plan history (see
+  [`specs/INDEX.md`](specs/INDEX.md) and
+  [`specs/ROADMAP.md`](specs/ROADMAP.md)).
 
 ## Contributing
 
 Issues and PRs are welcome. This project develops every feature
-through a spec/plan cycle (see [`specs/`](specs/) and
-[`CLAUDE.md`](CLAUDE.md)) — not required for outside contributions,
-but browsing an existing `specs/<date>-<name>/spec.md` is a good way
-to see the reasoning behind a given piece of code before changing it.
+through a spec/plan cycle — see [`specs/`](specs/), particularly
+[`specs/INDEX.md`](specs/INDEX.md), for the reasoning behind a given
+piece of code before changing it. Not required for outside
+contributions, just useful context.
 
 ## License
 
