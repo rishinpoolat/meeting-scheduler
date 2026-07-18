@@ -1,7 +1,7 @@
 # meeting-scheduler
 
 An agent that watches a Gmail inbox for meeting/scheduling enquiries
-sent via a portfolio website's contact email and responds
+— e.g. sent via a portfolio site's contact form — and responds
 autonomously: if the sender proposes a specific time and it's free, it
 books the event on Google Calendar and drafts a confirmation reply; if
 the sender asks for availability, it finds open slots on the calendar
@@ -11,6 +11,10 @@ afternoons, not clustered). Drafted replies sign off with the
 account's real name and never contain a date/time written by the LLM
 itself (see [Reliability notes](#reliability-notes)). All replies are
 created as Gmail drafts for manual review/send — never auto-sent.
+
+It runs entirely against **your own** Google account and Gemini API
+key — nothing is shared or hosted. See [Setup](#setup) below to run it
+against your own Gmail/Calendar with your own credentials.
 
 ## Stack
 
@@ -77,36 +81,86 @@ real inbox rather than mocked tests, and are worth knowing about:
 
 ## Setup
 
-1. Create a Google Cloud project with the Gmail and Calendar APIs
-   enabled, and download an OAuth2 `credentials.json` into the repo
-   root (see [`specs/2026-07-06-google-oauth/`](specs/2026-07-06-google-oauth/)
-   for the full one-time setup steps).
-2. Install dependencies:
+This project runs entirely against credentials you provide yourself —
+your own Google Cloud OAuth client and your own Gemini API key. Nobody
+else can see your inbox, calendar, or drafts; everything runs locally
+on your machine.
 
-   ```
-   python -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   ```
+### 1. Create a Google Cloud OAuth client
 
-3. Run any `scripts/check_*.py` script once to complete the interactive
-   OAuth consent flow and cache a local token (e.g.
-   `python -m scripts.check_auth`). If you ever add a new scope to
-   `auth/google_auth.py`'s `SCOPES` (e.g. `gmail.settings.basic`, added
-   for `gmail/profile.py`), delete the cached `token.json` first so the
-   next run re-prompts for consent under the new scope set — an old
-   token silently keeps only the scopes it was originally granted.
-4. Get a free Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey)
-   (no credit card required) and copy `.env.example` to `.env`,
-   filling in `GEMINI_API_KEY`. The free tier is rate-limited both
-   per minute *and* per day (as low as 20 requests/day on some
-   models) — `agent.py` and `scripts/check_llm.py` both pace/cap
-   their own calls to stay under the per-minute limit, but there's no
-   getting around the daily cap if you're testing heavily; expect a
-   429 if you exceed either. Optionally set `GEMINI_MODEL` in `.env`
-   to pin a specific model instead of the default `gemini-flash-latest`
-   alias — see [Reliability notes](#reliability-notes) for why this
-   project prefers an alias over a pinned version.
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+   and create (or select) a project.
+2. **APIs & Services → Library** — enable the **Gmail API** and the
+   **Google Calendar API**.
+3. **APIs & Services → OAuth consent screen** — set User type to
+   **External**, and add your own Gmail address as a **test user**
+   (this keeps the app in testing mode, which is fine for personal
+   use — no Google review needed).
+4. **APIs & Services → Credentials → Create Credentials → OAuth
+   client ID** — Application type **Desktop app**.
+5. Download the resulting JSON, rename it to `credentials.json`, and
+   place it at the repo root. This file is gitignored — it's your
+   personal client secret and must never be committed.
+
+### 2. Get a Gemini API key
+
+Get a free key (no credit card required) from
+[Google AI Studio](https://aistudio.google.com/apikey).
+
+### 3. Configure environment variables
+
+Copy `.env.example` to `.env` and fill in `GEMINI_API_KEY` with the
+key from step 2:
+
+```
+cp .env.example .env
+```
+
+`.env` is gitignored — your key stays local. The free tier is
+rate-limited both per minute *and* per day (as low as 20
+requests/day on some models) — `agent.py` and `scripts/check_llm.py`
+both pace/cap their own calls to stay under the per-minute limit, but
+there's no getting around the daily cap if you're testing heavily;
+expect a 429 if you exceed either. Optionally set `GEMINI_MODEL` in
+`.env` to pin a specific model instead of the default
+`gemini-flash-latest` alias — see
+[Reliability notes](#reliability-notes) for why this project prefers
+an alias over a pinned version.
+
+### 4. Install dependencies
+
+```
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 5. Complete the OAuth consent flow
+
+Run any `scripts/check_*.py` script once to open a browser, grant
+consent, and cache a local, refreshable token:
+
+```
+python -m scripts.check_auth
+```
+
+This creates `token.json` at the repo root (also gitignored — it's
+your personal access/refresh token). If you ever add a new scope to
+`auth/google_auth.py`'s `SCOPES`, delete the cached `token.json` first
+so the next run re-prompts for consent under the new scope set — an
+old token silently keeps only the scopes it was originally granted.
+
+### 6. Run it
+
+```
+python agent.py
+```
+
+Each run processes unread mail once and exits — there's no background
+polling loop by design. Run it again (manually, or on your own cron/
+scheduler) whenever you want to check for new mail. Check your Gmail
+Drafts folder for what it produced; nothing is ever sent without you
+reviewing and hitting send yourself.
 
 ## Commands
 
@@ -131,3 +185,15 @@ imports resolve against the repo root.
 
 See [`CODEBASE_MAP.md`](CODEBASE_MAP.md) for a folder-by-folder
 breakdown of what lives where and why.
+
+## Contributing
+
+Issues and PRs are welcome. This project develops every feature
+through a spec/plan cycle (see [`specs/`](specs/) and
+[`CLAUDE.md`](CLAUDE.md)) — not required for outside contributions,
+but browsing an existing `specs/<date>-<name>/spec.md` is a good way
+to see the reasoning behind a given piece of code before changing it.
+
+## License
+
+[MIT](LICENSE)
