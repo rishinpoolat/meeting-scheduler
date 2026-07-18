@@ -25,6 +25,35 @@ against your own Gmail/Calendar with your own credentials.
 - Google Calendar API
 - OAuth2 (`google-auth-oauthlib`)
 
+## How it works
+
+Each unread email is classified by Gemini into exactly one of four
+outcomes, and handled differently:
+
+1. **Proposes a specific time** ("Can we meet Tuesday at 2pm?") — the
+   agent checks Calendar free/busy for that slot. If it's free, it
+   books a confirmed event and drafts a confirmation reply. If it's
+   busy (a real meeting, or someone else's pending hold), it drafts a
+   reply saying so instead — there's no auto-rescheduling.
+2. **Asks for availability** ("What times work for you?") — the agent
+   finds up to 5 open 30-minute slots across the next 5 business days
+   (spread across mornings/afternoons, and pushed later if the sender
+   mentioned a timeframe like "next week"), creates one tentative
+   *hold* event per slot so two senders can't both be offered — and
+   both book — the same time, and drafts a reply listing all 5.
+3. **Accepts one of the previously offered slots** (a reply on that same
+   thread, e.g. "the 2nd time works") — the agent matches the reply to
+   the right tentative hold, confirms it into a real booked event, and
+   deletes the other unclaimed holds from that thread. Holds nobody
+   accepts within 48 hours are swept and released automatically on a
+   later run.
+4. **Irrelevant** (spam, newsletters, unrelated mail) — no calendar
+   action and no draft is created; the email is just marked read so
+   it isn't reclassified on the next run.
+
+Every path that produces a reply creates it as a Gmail **draft**, never
+sends it — you always review and hit send yourself.
+
 ## Status
 
 All features on the original roadmap are shipped: OAuth2 (Gmail +
