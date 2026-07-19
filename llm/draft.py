@@ -213,9 +213,7 @@ def _paragraph_to_html(paragraph: str) -> str:
 
 
 def _paragraphs_to_html(text: str) -> str:
-    return "\n".join(
-        _paragraph_to_html(p) for p in text.split("\n\n") if p.strip()
-    )
+    return "\n".join(_paragraph_to_html(p) for p in text.split("\n\n") if p.strip())
 
 
 def _complete(client: Any, prompt: str) -> str:
