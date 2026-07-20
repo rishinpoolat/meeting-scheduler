@@ -1,6 +1,6 @@
-# meeting-scheduler
+# Meeting Scheduler
 
-An agent that watches a Gmail inbox for meeting/scheduling enquiries
+An AI agent that watches a Gmail inbox for meeting/scheduling enquiries
 — e.g. sent via a portfolio site's contact form — and responds
 autonomously: if the sender proposes a specific time and it's free, it
 books the event on Google Calendar and drafts a confirmation reply; if
@@ -39,7 +39,7 @@ outcomes, and handled differently:
    finds up to 5 open 30-minute slots across the next 5 business days
    (spread across mornings/afternoons, and pushed later if the sender
    mentioned a timeframe like "next week"), creates one tentative
-   *hold* event per slot so two senders can't both be offered — and
+   _hold_ event per slot so two senders can't both be offered — and
    both book — the same time, and drafts a reply listing all 5.
 3. **Accepts one of the previously offered slots** (a reply on that same
    thread, e.g. "the 2nd time works") — the agent matches the reply to
@@ -86,7 +86,7 @@ real inbox rather than mocked tests, and are worth knowing about:
   guaranteed-correct value — raising an error (safely retried next
   run) if the placeholder is ever missing or duplicated, rather than
   risking a wrong time reaching a real recipient.
-- **Gemini's free tier has both a per-minute *and* a daily quota**
+- **Gemini's free tier has both a per-minute _and_ a daily quota**
   (as low as 20 requests/day on some models) — a real run hit both.
   `agent.py` caps unread polling by count and a 2-day window, and
   disables Gemini's "thinking" tokens (`thinking_budget=0`) for the
@@ -142,7 +142,7 @@ cp .env.example .env
 ```
 
 `.env` is gitignored — your key stays local. The free tier is
-rate-limited both per minute *and* per day (as low as 20
+rate-limited both per minute _and_ per day (as low as 20
 requests/day on some models) — `agent.py` and `scripts/check_llm.py`
 both pace/cap their own calls to stay under the per-minute limit, but
 there's no getting around the daily cap if you're testing heavily;
@@ -189,18 +189,18 @@ reviewing and hitting send yourself.
 
 ## Commands
 
-| Command | Purpose |
-| --- | --- |
-| `pip install -r requirements.txt` | Install dependencies |
-| `python agent.py` | Run one polling cycle |
-| `python -m scripts.check_auth` | Manually verify OAuth is working |
-| `python -m scripts.check_gmail` | Manually verify Gmail read/draft |
-| `python -m scripts.check_gcalendar` | Manually verify Calendar free/busy, slots, and holds |
-| `python -m scripts.check_llm` | Manually verify Gemini classification and reply drafting |
-| `pytest` | Run tests |
-| `mypy .` | Typecheck |
-| `ruff check .` | Lint |
-| `ruff format .` | Format |
+| Command                             | Purpose                                                  |
+| ----------------------------------- | -------------------------------------------------------- |
+| `pip install -r requirements.txt`   | Install dependencies                                     |
+| `python agent.py`                   | Run one polling cycle                                    |
+| `python -m scripts.check_auth`      | Manually verify OAuth is working                         |
+| `python -m scripts.check_gmail`     | Manually verify Gmail read/draft                         |
+| `python -m scripts.check_gcalendar` | Manually verify Calendar free/busy, slots, and holds     |
+| `python -m scripts.check_llm`       | Manually verify Gemini classification and reply drafting |
+| `pytest`                            | Run tests                                                |
+| `mypy .`                            | Typecheck                                                |
+| `ruff check .`                      | Lint                                                     |
+| `ruff format .`                     | Format                                                   |
 
 Scripts under `scripts/` are run as modules (`python -m scripts.x`, not
 `python scripts/x.py`) so their `from auth...`/`from gmail...` etc.
