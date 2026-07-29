@@ -5,10 +5,14 @@ from googleapiclient.errors import HttpError
 
 from gcalendar.events import (
     book_event,
+    cancel_booking,
     confirm_hold,
     create_hold,
     expire_stale_holds,
+    find_booking_by_attendee,
+    find_booking_by_thread,
     list_holds,
+    reschedule_booking,
 )
 
 
@@ -40,12 +44,36 @@ def _hold_item(
     }
 
 
-def test_book_event_creates_confirmed_event_without_notifying():
+def _booking_item(
+    event_id,
+    thread_id=None,
+    status="confirmed",
+    attendees=None,
+    start="2024-01-02T09:00:00Z",
+    end="2024-01-02T09:30:00Z",
+    tagged=True,
+):
+    private = {}
+    if tagged:
+        private["scheduler_booking"] = "true"
+        if thread_id is not None:
+            private["scheduler_thread_id"] = thread_id
+    return {
+        "id": event_id,
+        "status": status,
+        "start": {"dateTime": start},
+        "end": {"dateTime": end},
+        "attendees": attendees or [],
+        "extendedProperties": {"private": private},
+    }
+
+
+def test_book_event_creates_confirmed_event_tagged_with_thread_id():
     service = _service()
     start = datetime(2024, 1, 2, 9, 0, tzinfo=timezone.utc)
     end = datetime(2024, 1, 2, 9, 30, tzinfo=timezone.utc)
 
-    book_event(service, "Intro call", start, end, "sender@example.com")
+    book_event(service, "Intro call", start, end, "sender@example.com", "thread-1")
 
     service.events.return_value.insert.assert_called_once_with(
         calendarId="primary",
@@ -55,6 +83,12 @@ def test_book_event_creates_confirmed_event_without_notifying():
             "start": {"dateTime": start.isoformat()},
             "end": {"dateTime": end.isoformat()},
             "attendees": [{"email": "sender@example.com"}],
+            "extendedProperties": {
+                "private": {
+                    "scheduler_booking": "true",
+                    "scheduler_thread_id": "thread-1",
+                }
+            },
         },
         sendUpdates="none",
     )
@@ -139,7 +173,9 @@ def test_confirm_hold_patches_target_and_deletes_only_siblings():
         eventId="evt-2",
         body={
             "status": "confirmed",
-            "extendedProperties": {"private": {"scheduler_hold": "false"}},
+            "extendedProperties": {
+                "private": {"scheduler_hold": "false", "scheduler_booking": "true"}
+            },
         },
         sendUpdates="none",
     )
@@ -241,3 +277,202 @@ def test_expire_stale_holds_swallows_404_mid_sweep():
     deleted = expire_stale_holds(service, max_age_hours=48, now=now)
 
     assert deleted == ["stale-1", "stale-2"]
+
+
+def test_find_booking_by_thread_queries_booking_and_thread_tags():
+    service = _service()
+    service.events.return_value.list.return_value.execute.return_value = {"items": []}
+
+    find_booking_by_thread(service, "thread-1")
+
+    service.events.return_value.list.assert_called_once_with(
+        calendarId="primary",
+        privateExtendedProperty=[
+            "scheduler_booking=true",
+            "scheduler_thread_id=thread-1",
+        ],
+    )
+
+
+def test_find_booking_by_thread_returns_none_when_untagged():
+    service = _service()
+    service.events.return_value.list.return_value.execute.return_value = {"items": []}
+
+    assert find_booking_by_thread(service, "thread-1") is None
+
+
+def test_find_booking_by_thread_returns_match():
+    service = _service()
+    service.events.return_value.list.return_value.execute.return_value = {
+        "items": [_booking_item("evt-1", thread_id="thread-1")]
+    }
+
+    booking = find_booking_by_thread(service, "thread-1")
+
+    assert booking is not None
+    assert booking.id == "evt-1"
+    assert booking.thread_id == "thread-1"
+    assert booking.start == datetime(2024, 1, 2, 9, 0, tzinfo=timezone.utc)
+    assert booking.end == datetime(2024, 1, 2, 9, 30, tzinfo=timezone.utc)
+
+
+def test_find_booking_by_thread_multiple_matches_picks_latest_start():
+    service = _service()
+    service.events.return_value.list.return_value.execute.return_value = {
+        "items": [
+            _booking_item(
+                "earlier",
+                thread_id="thread-1",
+                start="2024-01-02T09:00:00Z",
+                end="2024-01-02T09:30:00Z",
+            ),
+            _booking_item(
+                "later",
+                thread_id="thread-1",
+                start="2024-01-03T09:00:00Z",
+                end="2024-01-03T09:30:00Z",
+            ),
+        ]
+    }
+
+    booking = find_booking_by_thread(service, "thread-1")
+
+    assert booking is not None
+    assert booking.id == "later"
+
+
+def test_find_booking_by_attendee_returns_single_match():
+    service = _service()
+    now = datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
+    service.events.return_value.list.return_value.execute.return_value = {
+        "items": [
+            _booking_item(
+                "evt-1",
+                attendees=[{"email": "Sender@Example.com"}],
+                tagged=False,
+            )
+        ]
+    }
+
+    booking = find_booking_by_attendee(service, "sender@example.com", now)
+
+    assert booking is not None
+    assert booking.id == "evt-1"
+    assert booking.thread_id is None
+    service.events.return_value.list.assert_called_once_with(
+        calendarId="primary",
+        timeMin=now.isoformat(),
+        singleEvents=True,
+        maxResults=250,
+    )
+
+
+def test_find_booking_by_attendee_returns_none_on_zero_matches():
+    service = _service()
+    now = datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
+    service.events.return_value.list.return_value.execute.return_value = {
+        "items": [
+            _booking_item(
+                "evt-1", attendees=[{"email": "other@example.com"}], tagged=False
+            )
+        ]
+    }
+
+    assert find_booking_by_attendee(service, "sender@example.com", now) is None
+
+
+def test_find_booking_by_attendee_returns_none_on_multiple_matches():
+    service = _service()
+    now = datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
+    service.events.return_value.list.return_value.execute.return_value = {
+        "items": [
+            _booking_item(
+                "evt-1", attendees=[{"email": "sender@example.com"}], tagged=False
+            ),
+            _booking_item(
+                "evt-2",
+                attendees=[{"email": "sender@example.com"}],
+                tagged=False,
+                start="2024-01-05T09:00:00Z",
+                end="2024-01-05T09:30:00Z",
+            ),
+        ]
+    }
+
+    assert find_booking_by_attendee(service, "sender@example.com", now) is None
+
+
+def test_find_booking_by_attendee_excludes_holds_and_already_tagged_bookings():
+    service = _service()
+    now = datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
+    hold_item = _hold_item("hold-1", "thread-1", "2024-01-01T00:00:00Z")
+    hold_item["status"] = "tentative"
+    hold_item["attendees"] = [{"email": "sender@example.com"}]
+    tagged_booking = _booking_item(
+        "evt-tagged", thread_id="thread-2", attendees=[{"email": "sender@example.com"}]
+    )
+    untagged_booking = _booking_item(
+        "evt-untagged", attendees=[{"email": "sender@example.com"}], tagged=False
+    )
+    service.events.return_value.list.return_value.execute.return_value = {
+        "items": [hold_item, tagged_booking, untagged_booking]
+    }
+
+    booking = find_booking_by_attendee(service, "sender@example.com", now)
+
+    assert booking is not None
+    assert booking.id == "evt-untagged"
+
+
+def test_find_booking_by_attendee_ignores_non_confirmed_events():
+    service = _service()
+    now = datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
+    service.events.return_value.list.return_value.execute.return_value = {
+        "items": [
+            _booking_item(
+                "evt-1",
+                status="cancelled",
+                attendees=[{"email": "sender@example.com"}],
+                tagged=False,
+            )
+        ]
+    }
+
+    assert find_booking_by_attendee(service, "sender@example.com", now) is None
+
+
+def test_cancel_booking_deletes_event():
+    service = _service()
+
+    cancel_booking(service, "evt-1")
+
+    service.events.return_value.delete.assert_called_once_with(
+        calendarId="primary", eventId="evt-1", sendUpdates="none"
+    )
+
+
+def test_cancel_booking_swallows_404():
+    service = _service()
+    service.events.return_value.delete.return_value.execute.side_effect = _http_error(
+        404
+    )
+
+    cancel_booking(service, "evt-1")  # should not raise
+
+
+def test_reschedule_booking_patches_start_and_end():
+    service = _service()
+    new_start = datetime(2024, 1, 5, 10, 0, tzinfo=timezone.utc)
+    new_end = datetime(2024, 1, 5, 10, 30, tzinfo=timezone.utc)
+
+    reschedule_booking(service, "evt-1", new_start, new_end)
+
+    service.events.return_value.patch.assert_called_once_with(
+        calendarId="primary",
+        eventId="evt-1",
+        body={
+            "start": {"dateTime": new_start.isoformat()},
+            "end": {"dateTime": new_end.isoformat()},
+        },
+        sendUpdates="none",
+    )

@@ -11,7 +11,7 @@ from agent import (
     process_message,
     run_cycle,
 )
-from gcalendar.events import Hold
+from gcalendar.events import Booking, Hold
 from gcalendar.slots import SLOT_DURATION, TimeSlot
 from gmail.read import Message
 from llm.classify import Classification
@@ -45,9 +45,18 @@ def _classification(**overrides: object) -> Classification:
         "proposed_time": None,
         "matched_hold": None,
         "earliest_offer_time": None,
+        "new_proposed_time": None,
     }
     fields.update(overrides)
     return Classification(**fields)  # type: ignore[arg-type]
+
+
+BOOKING = Booking(
+    id="booking-1",
+    thread_id="thread-1",
+    start=datetime(2026, 7, 10, 9, 0, tzinfo=timezone.utc),
+    end=datetime(2026, 7, 10, 9, 30, tzinfo=timezone.utc),
+)
 
 
 class TestProcessMessage:
@@ -86,11 +95,21 @@ class TestProcessMessage:
             patch("agent.book_event") as mock_book,
             patch("agent.create_hold") as mock_hold,
             patch("agent.confirm_hold") as mock_confirm,
+            patch("agent.find_booking_by_thread") as mock_find_booking_thread,
+            patch("agent.find_booking_by_attendee") as mock_find_booking_attendee,
+            patch("agent.cancel_booking") as mock_cancel_booking,
+            patch("agent.reschedule_booking") as mock_reschedule_booking,
             patch("agent.create_draft_reply") as mock_draft_reply,
             patch("agent.draft_booking_confirmation") as mock_draft_confirm,
             patch("agent.draft_time_unavailable") as mock_draft_unavailable,
             patch("agent.draft_slot_offer") as mock_draft_offer,
             patch("agent.draft_slot_confirmed") as mock_draft_slot_confirmed,
+            patch("agent.draft_cancellation_confirmation") as mock_draft_cancel,
+            patch("agent.draft_reschedule_confirmation") as mock_draft_reschedule,
+            patch(
+                "agent.draft_reschedule_unavailable"
+            ) as mock_draft_reschedule_unavail,
+            patch("agent.draft_booking_not_found") as mock_draft_not_found,
         ):
             process_message(
                 gmail_service,
@@ -106,11 +125,19 @@ class TestProcessMessage:
         mock_book.assert_not_called()
         mock_hold.assert_not_called()
         mock_confirm.assert_not_called()
+        mock_find_booking_thread.assert_not_called()
+        mock_find_booking_attendee.assert_not_called()
+        mock_cancel_booking.assert_not_called()
+        mock_reschedule_booking.assert_not_called()
         mock_draft_reply.assert_not_called()
         mock_draft_confirm.assert_not_called()
         mock_draft_unavailable.assert_not_called()
         mock_draft_offer.assert_not_called()
         mock_draft_slot_confirmed.assert_not_called()
+        mock_draft_cancel.assert_not_called()
+        mock_draft_reschedule.assert_not_called()
+        mock_draft_reschedule_unavail.assert_not_called()
+        mock_draft_not_found.assert_not_called()
 
     def test_propose_time_free_slot_books_and_confirms(self) -> None:
         gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
@@ -150,6 +177,7 @@ class TestProcessMessage:
             proposed_time,
             end,
             "jane@example.com",
+            MESSAGE.thread_id,
         )
         mock_draft_confirm.assert_called_once_with(
             llm_client, MESSAGE, proposed_time, end, YOUR_NAME
@@ -412,6 +440,289 @@ class TestProcessMessage:
             llm_client, MESSAGE, HOLD, YOUR_NAME
         )
         mock_draft_reply.assert_called_once_with(gmail_service, MESSAGE, "booked!")
+
+    def test_cancel_or_reschedule_with_no_new_time_cancels_booking(self) -> None:
+        gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
+        with (
+            patch("agent.list_holds", return_value=[]),
+            patch(
+                "agent.classify_email",
+                return_value=_classification(
+                    intent="cancel_or_reschedule", new_proposed_time=None
+                ),
+            ),
+            patch("agent.find_booking_by_thread", return_value=BOOKING) as mock_find,
+            patch("agent.find_booking_by_attendee") as mock_find_attendee,
+            patch("agent.cancel_booking") as mock_cancel,
+            patch(
+                "agent.draft_cancellation_confirmation", return_value="cancelled!"
+            ) as mock_draft_cancel,
+            patch("agent.create_draft_reply") as mock_draft_reply,
+        ):
+            process_message(
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
+            )
+
+        mock_find.assert_called_once_with(cal_service, MESSAGE.thread_id)
+        mock_find_attendee.assert_not_called()
+        mock_cancel.assert_called_once_with(cal_service, BOOKING.id)
+        mock_draft_cancel.assert_called_once_with(
+            llm_client, MESSAGE, BOOKING.start, BOOKING.end, YOUR_NAME
+        )
+        mock_draft_reply.assert_called_once_with(gmail_service, MESSAGE, "cancelled!")
+
+    def test_cancel_or_reschedule_with_free_new_time_reschedules_booking(self) -> None:
+        gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
+        new_time = datetime(2026, 7, 11, 14, 0, tzinfo=timezone.utc)
+        new_end = new_time + SLOT_DURATION
+        with (
+            patch("agent.list_holds", return_value=[]),
+            patch(
+                "agent.classify_email",
+                return_value=_classification(
+                    intent="cancel_or_reschedule", new_proposed_time=new_time
+                ),
+            ),
+            patch("agent.find_booking_by_thread", return_value=BOOKING),
+            patch("agent.is_slot_free", return_value=True) as mock_is_free,
+            patch("agent.reschedule_booking") as mock_reschedule,
+            patch("agent.cancel_booking") as mock_cancel,
+            patch(
+                "agent.draft_reschedule_confirmation", return_value="moved!"
+            ) as mock_draft_reschedule,
+            patch("agent.draft_reschedule_unavailable") as mock_draft_unavailable,
+            patch("agent.create_draft_reply") as mock_draft_reply,
+        ):
+            process_message(
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
+            )
+
+        mock_is_free.assert_called_once_with(cal_service, new_time, new_end, TZ_NAME)
+        mock_cancel.assert_not_called()
+        mock_reschedule.assert_called_once_with(
+            cal_service, BOOKING.id, new_time, new_end
+        )
+        mock_draft_reschedule.assert_called_once_with(
+            llm_client, MESSAGE, new_time, new_end, YOUR_NAME
+        )
+        mock_draft_unavailable.assert_not_called()
+        mock_draft_reply.assert_called_once_with(gmail_service, MESSAGE, "moved!")
+
+    def test_cancel_or_reschedule_with_busy_new_time_leaves_booking_untouched(
+        self,
+    ) -> None:
+        gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
+        new_time = datetime(2026, 7, 11, 14, 0, tzinfo=timezone.utc)
+        new_end = new_time + SLOT_DURATION
+        with (
+            patch("agent.list_holds", return_value=[]),
+            patch(
+                "agent.classify_email",
+                return_value=_classification(
+                    intent="cancel_or_reschedule", new_proposed_time=new_time
+                ),
+            ),
+            patch("agent.find_booking_by_thread", return_value=BOOKING),
+            patch("agent.is_slot_free", return_value=False),
+            patch("agent.reschedule_booking") as mock_reschedule,
+            patch("agent.cancel_booking") as mock_cancel,
+            patch("agent.draft_reschedule_confirmation") as mock_draft_reschedule,
+            patch(
+                "agent.draft_reschedule_unavailable", return_value="still busy"
+            ) as mock_draft_unavailable,
+            patch("agent.create_draft_reply") as mock_draft_reply,
+        ):
+            process_message(
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
+            )
+
+        mock_reschedule.assert_not_called()
+        mock_cancel.assert_not_called()
+        mock_draft_reschedule.assert_not_called()
+        mock_draft_unavailable.assert_called_once_with(
+            llm_client, MESSAGE, new_time, new_end, YOUR_NAME
+        )
+        mock_draft_reply.assert_called_once_with(gmail_service, MESSAGE, "still busy")
+
+    def test_cancel_or_reschedule_with_past_new_time_is_treated_as_unavailable(
+        self,
+    ) -> None:
+        gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
+        past_time = NOW - timedelta(hours=1)
+        past_end = past_time + (BOOKING.end - BOOKING.start)
+        with (
+            patch("agent.list_holds", return_value=[]),
+            patch(
+                "agent.classify_email",
+                return_value=_classification(
+                    intent="cancel_or_reschedule", new_proposed_time=past_time
+                ),
+            ),
+            patch("agent.find_booking_by_thread", return_value=BOOKING),
+            patch("agent.is_slot_free") as mock_is_free,
+            patch("agent.reschedule_booking") as mock_reschedule,
+            patch("agent.draft_reschedule_confirmation") as mock_draft_reschedule,
+            patch(
+                "agent.draft_reschedule_unavailable", return_value="that's in the past"
+            ) as mock_draft_unavailable,
+            patch("agent.create_draft_reply") as mock_draft_reply,
+        ):
+            process_message(
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
+            )
+
+        mock_is_free.assert_not_called()
+        mock_reschedule.assert_not_called()
+        mock_draft_reschedule.assert_not_called()
+        mock_draft_unavailable.assert_called_once_with(
+            llm_client, MESSAGE, past_time, past_end, YOUR_NAME
+        )
+        mock_draft_reply.assert_called_once_with(
+            gmail_service, MESSAGE, "that's in the past"
+        )
+
+    def test_cancel_or_reschedule_preserves_original_booking_duration(self) -> None:
+        gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
+        hour_long_booking = Booking(
+            id="booking-legacy",
+            thread_id=None,
+            start=datetime(2026, 7, 10, 9, 0, tzinfo=timezone.utc),
+            end=datetime(2026, 7, 10, 10, 0, tzinfo=timezone.utc),
+        )
+        new_time = datetime(2026, 7, 11, 14, 0, tzinfo=timezone.utc)
+        expected_new_end = new_time + timedelta(hours=1)
+        with (
+            patch("agent.list_holds", return_value=[]),
+            patch(
+                "agent.classify_email",
+                return_value=_classification(
+                    intent="cancel_or_reschedule", new_proposed_time=new_time
+                ),
+            ),
+            patch("agent.find_booking_by_thread", return_value=hour_long_booking),
+            patch("agent.is_slot_free", return_value=True) as mock_is_free,
+            patch("agent.reschedule_booking") as mock_reschedule,
+            patch("agent.draft_reschedule_confirmation", return_value="moved!"),
+            patch("agent.create_draft_reply"),
+        ):
+            process_message(
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
+            )
+
+        mock_is_free.assert_called_once_with(
+            cal_service, new_time, expected_new_end, TZ_NAME
+        )
+        mock_reschedule.assert_called_once_with(
+            cal_service, hour_long_booking.id, new_time, expected_new_end
+        )
+
+    def test_cancel_or_reschedule_falls_back_to_attendee_match_when_untagged(
+        self,
+    ) -> None:
+        gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
+        with (
+            patch("agent.list_holds", return_value=[]),
+            patch(
+                "agent.classify_email",
+                return_value=_classification(
+                    intent="cancel_or_reschedule", new_proposed_time=None
+                ),
+            ),
+            patch("agent.find_booking_by_thread", return_value=None) as mock_find,
+            patch(
+                "agent.find_booking_by_attendee", return_value=BOOKING
+            ) as mock_find_attendee,
+            patch("agent.cancel_booking") as mock_cancel,
+            patch("agent.draft_cancellation_confirmation", return_value="cancelled!"),
+            patch("agent.create_draft_reply") as mock_draft_reply,
+        ):
+            process_message(
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
+            )
+
+        mock_find.assert_called_once_with(cal_service, MESSAGE.thread_id)
+        mock_find_attendee.assert_called_once_with(cal_service, "jane@example.com", NOW)
+        mock_cancel.assert_called_once_with(cal_service, BOOKING.id)
+        mock_draft_reply.assert_called_once_with(gmail_service, MESSAGE, "cancelled!")
+
+    def test_cancel_or_reschedule_with_no_matching_booking_drafts_not_found(
+        self,
+    ) -> None:
+        gmail_service, cal_service, llm_client = MagicMock(), MagicMock(), MagicMock()
+        with (
+            patch("agent.list_holds", return_value=[]),
+            patch(
+                "agent.classify_email",
+                return_value=_classification(
+                    intent="cancel_or_reschedule", new_proposed_time=None
+                ),
+            ),
+            patch("agent.find_booking_by_thread", return_value=None),
+            patch("agent.find_booking_by_attendee", return_value=None),
+            patch("agent.cancel_booking") as mock_cancel,
+            patch("agent.reschedule_booking") as mock_reschedule,
+            patch(
+                "agent.draft_booking_not_found", return_value="not found"
+            ) as mock_draft_not_found,
+            patch("agent.create_draft_reply") as mock_draft_reply,
+        ):
+            process_message(
+                gmail_service,
+                cal_service,
+                llm_client,
+                MESSAGE,
+                "body",
+                NOW,
+                TZ_NAME,
+                YOUR_NAME,
+            )
+
+        mock_cancel.assert_not_called()
+        mock_reschedule.assert_not_called()
+        mock_draft_not_found.assert_called_once_with(llm_client, MESSAGE, YOUR_NAME)
+        mock_draft_reply.assert_called_once_with(gmail_service, MESSAGE, "not found")
 
 
 class TestRunCycle:

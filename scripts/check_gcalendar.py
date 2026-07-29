@@ -43,6 +43,7 @@ def main() -> None:
         first_slot.start,
         first_slot.end,
         TEST_ATTENDEE,
+        TEST_THREAD_ID,
     )
     print(f"\nBooked confirmed event id={booked['id']}")
     still_free = is_slot_free(service, first_slot.start, first_slot.end, tz_name)
