@@ -337,10 +337,10 @@ def test_draft_functions_use_correct_model_and_strip_response_text(draft_fn, arg
     assert placeholder not in result.text
     _, kwargs = client.models.generate_content.call_args
     assert kwargs["model"] == GEMINI_MODEL
-    # Locks in the thinking_budget=0 fix - draft.py has no response_schema
+    # Locks in the thinking_budget fix - draft.py has no response_schema
     # to detect truncation via a parse failure, so a regression here could
     # silently produce a truncated draft with no error raised.
-    assert kwargs["config"].thinking_config.thinking_budget == 0
+    assert kwargs["config"].thinking_config.thinking_budget == -1
 
 
 @pytest.mark.parametrize("draft_fn, args", DRAFT_CASES)

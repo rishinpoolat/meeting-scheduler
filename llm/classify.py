@@ -15,8 +15,11 @@ Intent = Literal["propose_time", "ask_availability", "accept_slot", "irrelevant"
 
 # Gemini flash models' "thinking" tokens otherwise share this same budget
 # (AUTOMATIC by default) before any JSON is emitted, which can silently
-# truncate the response on a more complex email; disabled below via
-# thinking_budget=0 since this extraction task doesn't need chain-of-thought.
+# truncate the response on a more complex email. thinking_budget=0
+# (fully disabled) previously worked but started returning 400
+# INVALID_ARGUMENT after a server-side model upgrade; -1 (dynamic,
+# model-chosen budget) is accepted across model generations and still
+# avoids the AUTOMATIC default's larger, truncation-prone budget.
 CLASSIFY_MAX_OUTPUT_TOKENS = 1024
 
 
@@ -93,7 +96,7 @@ def classify_email(
             response_mime_type="application/json",
             response_schema=ClassificationResult,
             max_output_tokens=CLASSIFY_MAX_OUTPUT_TOKENS,
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
+            thinking_config=types.ThinkingConfig(thinking_budget=-1),
         ),
     )
 

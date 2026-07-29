@@ -342,6 +342,8 @@ def test_classify_email_uses_correct_model_and_response_schema():
     assert kwargs["model"] == GEMINI_MODEL
     assert kwargs["config"].response_mime_type == "application/json"
     assert kwargs["config"].response_schema is ClassificationResult
-    # Locks in the thinking_budget=0 fix - a regression here would silently
-    # reintroduce the real MAX_TOKENS truncation failure this guards against.
-    assert kwargs["config"].thinking_config.thinking_budget == 0
+    # Locks in the thinking_budget fix - a regression here would silently
+    # reintroduce the real MAX_TOKENS truncation failure this guards against,
+    # or the 400 INVALID_ARGUMENT a later model upgrade caused for the
+    # previous thinking_budget=0 value (see llm/classify.py's comment).
+    assert kwargs["config"].thinking_config.thinking_budget == -1
