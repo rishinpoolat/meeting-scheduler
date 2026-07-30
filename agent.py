@@ -10,10 +10,14 @@ from gcalendar.client import get_service as get_calendar_service
 from gcalendar.events import (
     Hold,
     book_event,
+    cancel_booking,
     confirm_hold,
     create_hold,
     expire_stale_holds,
+    find_booking_by_attendee,
+    find_booking_by_thread,
     list_holds,
+    reschedule_booking,
 )
 from gcalendar.freebusy import get_calendar_timezone, is_slot_free
 from gcalendar.slots import SLOT_DURATION, find_open_slots
@@ -31,6 +35,10 @@ from llm.classify import classify_email
 from llm.client import get_client as get_llm_client
 from llm.draft import (
     draft_booking_confirmation,
+    draft_booking_not_found,
+    draft_cancellation_confirmation,
+    draft_reschedule_confirmation,
+    draft_reschedule_unavailable,
     draft_slot_confirmed,
     draft_slot_offer,
     draft_time_unavailable,
@@ -137,6 +145,17 @@ def process_message(
             classification.matched_hold,
             your_name,
         )
+    elif classification.intent == "cancel_or_reschedule":
+        _handle_cancel_or_reschedule(
+            gmail_service,
+            cal_service,
+            llm_client,
+            message,
+            classification.new_proposed_time,
+            now,
+            tz_name,
+            your_name,
+        )
     # "irrelevant" -> no draft, no calendar write.
 
 
@@ -158,6 +177,7 @@ def _handle_propose_time(
             proposed_time,
             end,
             _sender_email(message),
+            message.thread_id,
         )
         reply_body = draft_booking_confirmation(
             llm_client, message, proposed_time, end, your_name
@@ -203,6 +223,43 @@ def _handle_accept_slot(
 ) -> None:
     confirm_hold(cal_service, message.thread_id, hold.id)
     reply_body = draft_slot_confirmed(llm_client, message, hold, your_name)
+    create_draft_reply(gmail_service, message, reply_body)
+
+
+def _handle_cancel_or_reschedule(
+    gmail_service: Any,
+    cal_service: Any,
+    llm_client: Any,
+    message: Message,
+    new_time: datetime | None,
+    now: datetime,
+    tz_name: str,
+    your_name: str,
+) -> None:
+    booking = find_booking_by_thread(cal_service, message.thread_id)
+    if booking is None:
+        booking = find_booking_by_attendee(cal_service, _sender_email(message), now)
+    if booking is None:
+        reply_body = draft_booking_not_found(llm_client, message, your_name)
+        create_draft_reply(gmail_service, message, reply_body)
+        return
+
+    if new_time is None:
+        cancel_booking(cal_service, booking.id)
+        reply_body = draft_cancellation_confirmation(
+            llm_client, message, booking.start, booking.end, your_name
+        )
+    else:
+        new_end = new_time + (booking.end - booking.start)
+        if new_time > now and is_slot_free(cal_service, new_time, new_end, tz_name):
+            reschedule_booking(cal_service, booking.id, new_time, new_end)
+            reply_body = draft_reschedule_confirmation(
+                llm_client, message, new_time, new_end, your_name
+            )
+        else:
+            reply_body = draft_reschedule_unavailable(
+                llm_client, message, new_time, new_end, your_name
+            )
     create_draft_reply(gmail_service, message, reply_body)
 
 

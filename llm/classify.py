@@ -11,7 +11,13 @@ from config import GEMINI_MODEL
 from gcalendar.events import Hold
 from gmail.read import Message
 
-Intent = Literal["propose_time", "ask_availability", "accept_slot", "irrelevant"]
+Intent = Literal[
+    "propose_time",
+    "ask_availability",
+    "accept_slot",
+    "cancel_or_reschedule",
+    "irrelevant",
+]
 
 # Gemini flash models' "thinking" tokens otherwise share this same budget
 # (AUTOMATIC by default) before any JSON is emitted, which can silently
@@ -30,8 +36,9 @@ class ClassificationResult(BaseModel):
             "ask_availability: sender asks when you're free, without "
             "proposing a time. accept_slot: sender is replying to accept "
             "one of the previously offered candidate slots listed below. "
-            "irrelevant: anything else (spam, newsletters, unrelated "
-            "correspondence)."
+            "cancel_or_reschedule: sender wants to cancel an existing "
+            "meeting, or move it to a different time. irrelevant: "
+            "anything else (spam, newsletters, unrelated correspondence)."
         )
     )
     proposed_time: str | None = Field(
@@ -59,6 +66,16 @@ class ClassificationResult(BaseModel):
             "Set only when intent is accept_slot; null otherwise."
         )
     )
+    new_proposed_time: str | None = Field(
+        description=(
+            "ISO 8601 datetime with UTC offset, computed relative to the "
+            "current date/time given below. Set only when intent is "
+            "cancel_or_reschedule AND the sender named a specific new "
+            "time to move the meeting to; null when they're asking to "
+            "cancel outright (no new time), and null for every other "
+            "intent."
+        )
+    )
 
 
 @dataclass
@@ -67,6 +84,7 @@ class Classification:
     proposed_time: datetime | None
     matched_hold: Hold | None
     earliest_offer_time: datetime | None
+    new_proposed_time: datetime | None
 
 
 def classify_email(
@@ -140,6 +158,13 @@ def _build_prompt(
                 f"to {hold.end.strftime('%H:%M')}"
             )
     lines.append("")
+    lines.append(
+        "If the sender is asking to cancel or move an existing meeting, "
+        "use intent cancel_or_reschedule. If they name a specific new "
+        "time to move it to, set new_proposed_time; if they just want to "
+        "cancel with no new time, leave new_proposed_time null."
+    )
+    lines.append("")
     lines.append("Classify this email's scheduling intent.")
     return "\n".join(lines)
 
@@ -157,12 +182,14 @@ def _to_classification(
                 proposed_time=None,
                 matched_hold=None,
                 earliest_offer_time=None,
+                new_proposed_time=None,
             )
         return Classification(
             intent="propose_time",
             proposed_time=proposed_time,
             matched_hold=None,
             earliest_offer_time=None,
+            new_proposed_time=None,
         )
 
     if intent == "ask_availability":
@@ -171,6 +198,7 @@ def _to_classification(
             proposed_time=None,
             matched_hold=None,
             earliest_offer_time=_parse_iso_datetime(result.earliest_offer_time),
+            new_proposed_time=None,
         )
 
     if intent == "accept_slot":
@@ -181,12 +209,38 @@ def _to_classification(
                 proposed_time=None,
                 matched_hold=None,
                 earliest_offer_time=None,
+                new_proposed_time=None,
             )
         return Classification(
             intent="accept_slot",
             proposed_time=None,
             matched_hold=matched_hold,
             earliest_offer_time=None,
+            new_proposed_time=None,
+        )
+
+    if intent == "cancel_or_reschedule":
+        # A raw new_proposed_time string that fails to parse is ambiguous
+        # (did the sender name a new time or not?) - downgrade rather than
+        # guess, same rule as propose_time's proposed_time above.
+        if result.new_proposed_time is not None:
+            new_proposed_time = _parse_iso_datetime(result.new_proposed_time)
+            if new_proposed_time is None:
+                return Classification(
+                    intent="irrelevant",
+                    proposed_time=None,
+                    matched_hold=None,
+                    earliest_offer_time=None,
+                    new_proposed_time=None,
+                )
+        else:
+            new_proposed_time = None
+        return Classification(
+            intent="cancel_or_reschedule",
+            proposed_time=None,
+            matched_hold=None,
+            earliest_offer_time=None,
+            new_proposed_time=new_proposed_time,
         )
 
     return Classification(
@@ -194,6 +248,7 @@ def _to_classification(
         proposed_time=None,
         matched_hold=None,
         earliest_offer_time=None,
+        new_proposed_time=None,
     )
 
 

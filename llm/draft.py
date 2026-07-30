@@ -140,6 +140,107 @@ def draft_slot_confirmed(
     )
 
 
+def draft_cancellation_confirmation(
+    client: Any, message: Message, start: datetime, end: datetime, your_name: str
+) -> DraftBody:
+    """Draft a reply confirming a meeting has been cancelled."""
+    prompt = (
+        f"{_intro(message, your_name)}\n\n"
+        "They asked to cancel their meeting, and it has been cancelled. "
+        "Write a short, friendly email reply confirming the cancellation. "
+        "Insert the literal placeholder text "
+        f"{_MEETING_TIME_PLACEHOLDER} on a line by itself, with a blank "
+        "line before and after it, at the point where you would naturally "
+        "refer to the cancelled meeting's time - do not write out any "
+        "date or time yourself; the placeholder will be replaced "
+        "automatically."
+    )
+    return _complete_with_placeholder(
+        client,
+        prompt,
+        _MEETING_TIME_PLACEHOLDER,
+        _format_range(start, end),
+        _time_box_html(start, end),
+    )
+
+
+def draft_reschedule_confirmation(
+    client: Any,
+    message: Message,
+    new_start: datetime,
+    new_end: datetime,
+    your_name: str,
+) -> DraftBody:
+    """Draft a reply confirming a meeting has been moved to a new time."""
+    prompt = (
+        f"{_intro(message, your_name)}\n\n"
+        "They asked to move their previously scheduled meeting to a new "
+        "time, and it has been moved. Write a short, friendly email reply "
+        "confirming the new time - refer to the old time only in general "
+        'terms (e.g. "your previous time"), never a specific date or '
+        "time. Insert the literal placeholder text "
+        f"{_MEETING_TIME_PLACEHOLDER} on a line by itself, with a blank "
+        "line before and after it, at the point where you would naturally "
+        "state the new confirmed time - do not write out any date or "
+        "time yourself; the placeholder will be replaced automatically."
+    )
+    return _complete_with_placeholder(
+        client,
+        prompt,
+        _MEETING_TIME_PLACEHOLDER,
+        _format_range(new_start, new_end),
+        _time_box_html(new_start, new_end),
+    )
+
+
+def draft_reschedule_unavailable(
+    client: Any,
+    message: Message,
+    requested_start: datetime,
+    requested_end: datetime,
+    your_name: str,
+) -> DraftBody:
+    """Draft a reply saying the sender's requested new time is not
+    available, and that their existing meeting is unchanged."""
+    prompt = (
+        f"{_intro(message, your_name)}\n\n"
+        "They asked to move their meeting to a new time, but that new "
+        "time is not available, so their existing meeting has NOT been "
+        "changed and remains booked at its original time. Write a short, "
+        "friendly email reply letting them know the requested new time "
+        "doesn't work and their original meeting still stands, without "
+        "proposing an alternative time yourself. Insert the literal "
+        f"placeholder text {_MEETING_TIME_PLACEHOLDER} on a line by "
+        "itself, with a blank line before and after it, at the point "
+        "where you would naturally refer to their requested new time - "
+        "do not write out any date or time yourself; the placeholder "
+        "will be replaced automatically."
+    )
+    return _complete_with_placeholder(
+        client,
+        prompt,
+        _MEETING_TIME_PLACEHOLDER,
+        _format_range(requested_start, requested_end),
+        _time_box_html(requested_start, requested_end),
+    )
+
+
+def draft_booking_not_found(client: Any, message: Message, your_name: str) -> DraftBody:
+    """Draft a reply for when no matching booked meeting could be found
+    for this thread's cancel/reschedule request."""
+    prompt = (
+        f"{_intro(message, your_name)}\n\n"
+        "They asked to cancel or reschedule a meeting, but no matching "
+        "booked meeting could be found on file for this conversation. "
+        "Write a short, friendly email reply letting them know you "
+        "couldn't find a matching meeting and asking them to share more "
+        "detail (e.g. the date/time it was booked for) so it can be "
+        "sorted out."
+    )
+    text = _complete(client, prompt)
+    return DraftBody(text=text, html=_paragraphs_to_html(text))
+
+
 def _intro(message: Message, your_name: str) -> str:
     name = _greeting_name(message.from_address)
     return (

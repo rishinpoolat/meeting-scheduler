@@ -7,10 +7,12 @@ books the event on Google Calendar and drafts a confirmation reply; if
 the sender asks for availability, it finds open slots on the calendar
 — respecting any timeframe they mention (e.g. "next week") — and
 drafts a reply listing 5 suitable times (spread across mornings and
-afternoons, not clustered). Drafted replies sign off with the
-account's real name and never contain a date/time written by the LLM
-itself (see [Reliability notes](#reliability-notes)). All replies are
-created as Gmail drafts for manual review/send — never auto-sent.
+afternoons, not clustered). A sender with an already-confirmed meeting
+can also ask to cancel it or move it to a new time. Drafted replies
+sign off with the account's real name and never contain a date/time
+written by the LLM itself (see
+[Reliability notes](#reliability-notes)). All replies are created as
+Gmail drafts for manual review/send — never auto-sent.
 
 It runs entirely against **your own** Google account and Gemini API
 key — nothing is shared or hosted. See [Setup](#setup) below to run it
@@ -27,7 +29,7 @@ against your own Gmail/Calendar with your own credentials.
 
 ## How it works
 
-Each unread email is classified by Gemini into exactly one of four
+Each unread email is classified by Gemini into exactly one of five
 outcomes, and handled differently:
 
 1. **Proposes a specific time** ("Can we meet Tuesday at 2pm?") — the
@@ -47,7 +49,16 @@ outcomes, and handled differently:
    deletes the other unclaimed holds from that thread. Holds nobody
    accepts within 48 hours are swept and released automatically on a
    later run.
-4. **Irrelevant** (spam, newsletters, unrelated mail) — no calendar
+4. **Cancels or reschedules an existing meeting** ("please cancel our
+   meeting" / "can we move it to Friday at 3pm instead?") — the agent
+   looks up the sender's already-confirmed booking on that thread (or,
+   for meetings booked before this feature existed, a best-effort match
+   on the sender's email among upcoming confirmed events) and either
+   deletes it or moves it to the new time in place — checking free/busy
+   for the new time _before_ writing, so a busy new time leaves the
+   original meeting untouched. Drafts a matching confirmation, "that
+   time doesn't work," or "couldn't find a matching meeting" reply.
+5. **Irrelevant** (spam, newsletters, unrelated mail) — no calendar
    action and no draft is created; the email is just marked read so
    it isn't reclassified on the next run.
 
@@ -68,9 +79,10 @@ replies. `agent.py` is a manually-run, single-pass script by design
 (no scheduling loop — just run `python agent.py` whenever you want to
 check for new mail).
 
-Beyond the original roadmap, a round of testing against a real inbox
-surfaced and fixed several reliability issues — see
-[Reliability notes](#reliability-notes) below.
+Beyond the original roadmap: a sender with an already-confirmed
+meeting can now ask to cancel it or move it to a new time, and a round
+of testing against a real inbox surfaced and fixed several reliability
+issues — see [Reliability notes](#reliability-notes) below.
 
 ## Reliability notes
 
@@ -88,10 +100,15 @@ real inbox rather than mocked tests, and are worth knowing about:
   risking a wrong time reaching a real recipient.
 - **Gemini's free tier has both a per-minute _and_ a daily quota**
   (as low as 20 requests/day on some models) — a real run hit both.
-  `agent.py` caps unread polling by count and a 2-day window, and
-  disables Gemini's "thinking" tokens (`thinking_budget=0`) for the
-  small classification/drafting tasks here, since those tokens share
-  the same output budget and were silently truncating responses.
+  `agent.py` caps unread polling by count and a 2-day window, and sets
+  a small `thinking_budget` for the classification/drafting tasks
+  here, since Gemini's "thinking" tokens otherwise share the same
+  output budget and were silently truncating responses. That budget
+  value isn't fully stable across model upgrades, either — a value
+  that worked (`0`, fully disabled) started returning `400
+  INVALID_ARGUMENT` after a later model upgrade; `-1` (dynamic,
+  model-chosen budget) is accepted across model generations tested so
+  far and is what's used now.
 - **Model names get deprecated without much warning.** `gemini-2.5-flash`
   was sunset for new accounts mid-session; `config.py` now defaults to
   `gemini-flash-latest` (an alias, not a pinned version) to avoid

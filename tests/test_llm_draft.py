@@ -13,6 +13,10 @@ from llm.draft import (
     _format_time,
     _greeting_name,
     draft_booking_confirmation,
+    draft_booking_not_found,
+    draft_cancellation_confirmation,
+    draft_reschedule_confirmation,
+    draft_reschedule_unavailable,
     draft_slot_confirmed,
     draft_slot_offer,
     draft_time_unavailable,
@@ -38,6 +42,9 @@ DRAFT_CASES = [
     (draft_time_unavailable, (MESSAGE, START, END, YOUR_NAME)),
     (draft_slot_offer, (MESSAGE, [TimeSlot(start=START, end=END)], YOUR_NAME)),
     (draft_slot_confirmed, (MESSAGE, HOLD, YOUR_NAME)),
+    (draft_cancellation_confirmation, (MESSAGE, START, END, YOUR_NAME)),
+    (draft_reschedule_confirmation, (MESSAGE, START, END, YOUR_NAME)),
+    (draft_reschedule_unavailable, (MESSAGE, START, END, YOUR_NAME)),
 ]
 
 PLACEHOLDER_DRAFT_CASES = [
@@ -48,6 +55,21 @@ PLACEHOLDER_DRAFT_CASES = [
         draft_slot_offer,
         (MESSAGE, [TimeSlot(start=START, end=END)], YOUR_NAME),
         "[[SLOT_LIST]]",
+    ),
+    (
+        draft_cancellation_confirmation,
+        (MESSAGE, START, END, YOUR_NAME),
+        "[[MEETING_TIME]]",
+    ),
+    (
+        draft_reschedule_confirmation,
+        (MESSAGE, START, END, YOUR_NAME),
+        "[[MEETING_TIME]]",
+    ),
+    (
+        draft_reschedule_unavailable,
+        (MESSAGE, START, END, YOUR_NAME),
+        "[[MEETING_TIME]]",
     ),
 ]
 
@@ -165,6 +187,96 @@ def test_draft_slot_confirmed_replaces_placeholder_with_formatted_time():
     prompt = _prompt(client)
     assert "09:00" not in prompt
     assert "[[MEETING_TIME]]" in prompt
+
+
+def test_draft_cancellation_confirmation_replaces_placeholder_with_formatted_time():
+    client = _client_with_text(
+        "Confirming your meeting has been cancelled.\n\n"
+        "[[MEETING_TIME]]\n\nBest,\nMohammed Rishin Poolat"
+    )
+
+    result = draft_cancellation_confirmation(client, MESSAGE, START, END, YOUR_NAME)
+
+    assert result.text == (
+        "Confirming your meeting has been cancelled.\n\n"
+        "Thursday, July 9, 2026 from 9:00 AM to 9:30 AM\n\n"
+        "Best,\nMohammed Rishin Poolat"
+    )
+    assert "[[MEETING_TIME]]" not in result.html
+    assert "9:00 AM" in result.html
+    prompt = _prompt(client)
+    assert "09:00" not in prompt
+    assert "[[MEETING_TIME]]" in prompt
+
+
+def test_draft_reschedule_confirmation_replaces_placeholder_with_new_time():
+    new_start = START.replace(hour=13)
+    new_end = END.replace(hour=13, minute=30)
+    client = _client_with_text(
+        "Your meeting has been moved.\n\n[[MEETING_TIME]]\n\nBest,\nMohammed Rishin Poolat"
+    )
+
+    result = draft_reschedule_confirmation(
+        client, MESSAGE, new_start, new_end, YOUR_NAME
+    )
+
+    assert result.text == (
+        "Your meeting has been moved.\n\n"
+        "Thursday, July 9, 2026 from 1:00 PM to 1:30 PM\n\n"
+        "Best,\nMohammed Rishin Poolat"
+    )
+    assert "[[MEETING_TIME]]" not in result.html
+    assert "1:00 PM" in result.html
+    prompt = _prompt(client)
+    assert "13:00" not in prompt
+    assert "[[MEETING_TIME]]" in prompt
+
+
+def test_draft_reschedule_unavailable_replaces_placeholder_with_requested_time():
+    client = _client_with_text(
+        "That new time doesn't work.\n\n[[MEETING_TIME]]\n\nBest,\nMohammed Rishin Poolat"
+    )
+
+    result = draft_reschedule_unavailable(client, MESSAGE, START, END, YOUR_NAME)
+
+    assert result.text == (
+        "That new time doesn't work.\n\n"
+        "Thursday, July 9, 2026 from 9:00 AM to 9:30 AM\n\n"
+        "Best,\nMohammed Rishin Poolat"
+    )
+    assert "[[MEETING_TIME]]" not in result.html
+    prompt = _prompt(client)
+    assert "09:00" not in prompt
+    assert "[[MEETING_TIME]]" in prompt
+
+
+def test_draft_booking_not_found_completes_directly_with_no_placeholder():
+    client = _client_with_text("Sorry, no matching meeting was found on file.")
+
+    result = draft_booking_not_found(client, MESSAGE, YOUR_NAME)
+
+    assert result.text == "Sorry, no matching meeting was found on file."
+    assert "Sorry, no matching meeting was found on file." in result.html
+    assert "<p" in result.html
+    prompt = _prompt(client)
+    assert "[[MEETING_TIME]]" not in prompt
+    assert "[[SLOT_LIST]]" not in prompt
+
+
+def test_draft_booking_not_found_uses_correct_model():
+    client = _client_with_text("Sorry, no matching meeting found.")
+
+    draft_booking_not_found(client, MESSAGE, YOUR_NAME)
+
+    _, kwargs = client.models.generate_content.call_args
+    assert kwargs["model"] == GEMINI_MODEL
+
+
+def test_draft_booking_not_found_raises_value_error_on_empty_response():
+    client = _client_with_empty_text()
+
+    with pytest.raises(ValueError):
+        draft_booking_not_found(client, MESSAGE, YOUR_NAME)
 
 
 def test_draft_slot_offer_replaces_placeholder_with_bulleted_slot_list():
