@@ -227,7 +227,10 @@ def _complete(client: Any, prompt: str) -> str:
             # truncate the reply text (no response_schema here to detect it
             # via a parse failure - a truncated draft would otherwise slip
             # through as a non-empty response.text with no error raised).
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
+            # thinking_budget=0 (fully disabled) started returning 400
+            # INVALID_ARGUMENT after a server-side model upgrade; -1
+            # (dynamic budget) is accepted across model generations.
+            thinking_config=types.ThinkingConfig(thinking_budget=-1),
         ),
     )
     if not response.text:
